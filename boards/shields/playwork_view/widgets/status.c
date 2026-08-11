@@ -79,72 +79,24 @@ static const char *mode_name(const struct status_state *state) {
     }
 }
 
-static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], const struct status_state *state) {
-    lv_obj_t *canvas = lv_obj_get_child(widget, 0);
-    clear_canvas(canvas);
+static void draw_small_battery(lv_obj_t *canvas, uint8_t battery) {
+    lv_draw_rect_dsc_t fg;
+    init_rect_dsc(&fg, LVGL_FOREGROUND);
 
-    lv_draw_label_dsc_t large;
-    init_label_dsc(&large, LVGL_FOREGROUND, &lv_font_montserrat_18, LV_TEXT_ALIGN_CENTER);
+    lv_draw_rect_dsc_t bg;
+    init_rect_dsc(&bg, LVGL_BACKGROUND);
 
-    lv_draw_label_dsc_t small;
-    init_label_dsc(&small, LVGL_FOREGROUND, &lv_font_montserrat_14, LV_TEXT_ALIGN_CENTER);
+    lv_canvas_draw_rect(canvas, 1, 7, 11, 7, &fg);
+    lv_canvas_draw_rect(canvas, 2, 8, 9, 5, &bg);
+    lv_canvas_draw_rect(canvas, 12, 9, 2, 3, &fg);
 
-    lv_draw_line_dsc_t divider;
-    init_line_dsc(&divider, LVGL_FOREGROUND, 1);
-
-    char battery_text[8] = {};
-    snprintf(battery_text, sizeof(battery_text), "%u%%", state->battery);
-    lv_canvas_draw_text(canvas, 0, 5, CANVAS_SIZE, &large, battery_text);
-
-    lv_point_t line_points[] = {
-        {.x = 8, .y = 31},
-        {.x = 60, .y = 31},
-    };
-    lv_canvas_draw_line(canvas, line_points, 2, &divider);
-
-    char output_text[12] = {};
-
-    switch (state->selected_endpoint.transport) {
-    case ZMK_TRANSPORT_USB:
-        snprintf(output_text, sizeof(output_text), "USB");
-        break;
-
-    case ZMK_TRANSPORT_BLE:
-        if (!state->active_profile_bonded) {
-            snprintf(output_text, sizeof(output_text), "PAIRING");
-        } else if (state->active_profile_connected) {
-            snprintf(output_text, sizeof(output_text), "BT%d ON",
-                     state->active_profile_index + 1);
-        } else {
-            snprintf(output_text, sizeof(output_text), "BT%d OFF",
-                     state->active_profile_index + 1);
-        }
-        break;
-
-    default:
-        snprintf(output_text, sizeof(output_text), "READY");
-        break;
+    uint8_t fill = (battery * 7 + 99) / 100;
+    if (fill > 7) {
+        fill = 7;
     }
-
-    lv_canvas_draw_text(canvas, 0, 39, CANVAS_SIZE, &small, output_text);
-
-    rotate_canvas(canvas, cbuf);
-}
-
-static void draw_middle(lv_obj_t *widget, lv_color_t cbuf[], const struct status_state *state) {
-    lv_obj_t *canvas = lv_obj_get_child(widget, 1);
-    clear_canvas(canvas);
-
-    lv_draw_label_dsc_t small;
-    init_label_dsc(&small, LVGL_FOREGROUND, &lv_font_montserrat_14, LV_TEXT_ALIGN_CENTER);
-
-    lv_draw_label_dsc_t large;
-    init_label_dsc(&large, LVGL_FOREGROUND, &lv_font_montserrat_18, LV_TEXT_ALIGN_CENTER);
-
-    lv_canvas_draw_text(canvas, 0, 7, CANVAS_SIZE, &small, "MODE");
-    lv_canvas_draw_text(canvas, 0, 31, CANVAS_SIZE, &large, mode_name(state));
-
-    rotate_canvas(canvas, cbuf);
+    if (fill > 0) {
+        lv_canvas_draw_rect(canvas, 3, 9, fill, 3, &fg);
+    }
 }
 
 static void draw_profile_circle(lv_obj_t *canvas, const struct status_state *state,
@@ -157,7 +109,7 @@ static void draw_profile_circle(lv_obj_t *canvas, const struct status_state *sta
     init_arc_dsc(&outline, LVGL_FOREGROUND, 2);
 
     lv_draw_arc_dsc_t selected_fill;
-    init_arc_dsc(&selected_fill, LVGL_FOREGROUND, 9);
+    init_arc_dsc(&selected_fill, LVGL_FOREGROUND, 8);
 
     lv_draw_label_dsc_t normal_text;
     init_label_dsc(&normal_text, LVGL_FOREGROUND, &lv_font_montserrat_14,
@@ -168,14 +120,13 @@ static void draw_profile_circle(lv_obj_t *canvas, const struct status_state *sta
                    LV_TEXT_ALIGN_CENTER);
 
     if (connected) {
-        lv_canvas_draw_arc(canvas, x, y, 13, 0, 360, &outline);
+        lv_canvas_draw_arc(canvas, x, y, 11, 0, 360, &outline);
     } else if (bonded) {
-        /* Dashed outline = paired/bonded but not currently connected. */
         const int segments = 8;
         const int gap = 20;
 
         for (int i = 0; i < segments; i++) {
-            lv_canvas_draw_arc(canvas, x, y, 13,
+            lv_canvas_draw_arc(canvas, x, y, 11,
                                (360 / segments) * i + gap / 2,
                                (360 / segments) * (i + 1) - gap / 2,
                                &outline);
@@ -183,28 +134,99 @@ static void draw_profile_circle(lv_obj_t *canvas, const struct status_state *sta
     }
 
     if (selected) {
-        lv_canvas_draw_arc(canvas, x, y, 9, 0, 359, &selected_fill);
+        lv_canvas_draw_arc(canvas, x, y, 7, 0, 359, &selected_fill);
     }
 
     char label[2] = {};
     snprintf(label, sizeof(label), "%d", profile + 1);
 
-    lv_canvas_draw_text(canvas, x - 8, y - 9, 16,
+    lv_canvas_draw_text(canvas, x - 7, y - 9, 14,
                         selected ? &selected_text : &normal_text, label);
 }
 
+/*
+ * TOP:
+ * [battery] 87%                              BT 1
+ */
+static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], const struct status_state *state) {
+    lv_obj_t *canvas = lv_obj_get_child(widget, 0);
+    clear_canvas(canvas);
+
+    lv_draw_label_dsc_t left;
+    init_label_dsc(&left, LVGL_FOREGROUND, &lv_font_montserrat_14, LV_TEXT_ALIGN_LEFT);
+
+    lv_draw_label_dsc_t right;
+    init_label_dsc(&right, LVGL_FOREGROUND, &lv_font_montserrat_14, LV_TEXT_ALIGN_RIGHT);
+
+    draw_small_battery(canvas, state->battery);
+
+    char battery_text[8] = {};
+    snprintf(battery_text, sizeof(battery_text), "%u%%", state->battery);
+    lv_canvas_draw_text(canvas, 16, 3, 24, &left, battery_text);
+
+    char profile_text[10] = {};
+    if (state->selected_endpoint.transport == ZMK_TRANSPORT_USB) {
+        snprintf(profile_text, sizeof(profile_text), "USB");
+    } else {
+        snprintf(profile_text, sizeof(profile_text), "BT %d",
+                 state->active_profile_index + 1);
+    }
+
+    lv_canvas_draw_text(canvas, 38, 3, 30, &right, profile_text);
+
+    rotate_canvas(canvas, cbuf);
+}
+
+/*
+ * MIDDLE:
+ *                 PLAY
+ *
+ *            (1)          (2)
+ */
+static void draw_middle(lv_obj_t *widget, lv_color_t cbuf[], const struct status_state *state) {
+    lv_obj_t *canvas = lv_obj_get_child(widget, 1);
+    clear_canvas(canvas);
+
+    lv_draw_label_dsc_t mode;
+    init_label_dsc(&mode, LVGL_FOREGROUND, &lv_font_montserrat_18, LV_TEXT_ALIGN_CENTER);
+
+    lv_canvas_draw_text(canvas, 0, 3, CANVAS_SIZE, &mode, mode_name(state));
+
+    draw_profile_circle(canvas, state, 0, 19, 44);
+    draw_profile_circle(canvas, state, 1, 49, 44);
+
+    rotate_canvas(canvas, cbuf);
+}
+
+/*
+ * BOTTOM:
+ *              Connected
+ *
+ * The bottom canvas is partially clipped by the stock nice!view layout,
+ * so only a short status label is placed here.
+ */
 static void draw_bottom(lv_obj_t *widget, lv_color_t cbuf[], const struct status_state *state) {
     lv_obj_t *canvas = lv_obj_get_child(widget, 2);
     clear_canvas(canvas);
 
-    lv_draw_label_dsc_t title;
-    init_label_dsc(&title, LVGL_FOREGROUND, &lv_font_montserrat_14, LV_TEXT_ALIGN_CENTER);
+    lv_draw_label_dsc_t status;
+    init_label_dsc(&status, LVGL_FOREGROUND, &lv_font_montserrat_14, LV_TEXT_ALIGN_CENTER);
 
-    lv_canvas_draw_text(canvas, 0, 2, CANVAS_SIZE, &title, "BT");
+    const char *status_text = "Ready";
 
-    /* Only the two profiles used by this keyboard are shown. */
-    draw_profile_circle(canvas, state, 0, 18, 38);
-    draw_profile_circle(canvas, state, 1, 50, 38);
+    if (state->selected_endpoint.transport == ZMK_TRANSPORT_USB) {
+        status_text = "USB";
+    } else if (state->selected_endpoint.transport == ZMK_TRANSPORT_BLE) {
+        if (!state->active_profile_bonded) {
+            status_text = "Pairing";
+        } else if (state->active_profile_connected) {
+            status_text = "Connected";
+        } else {
+            status_text = "Offline";
+        }
+    }
+
+    lv_canvas_draw_text(canvas, 0, 4, CANVAS_SIZE, &status, status_text);
 
     rotate_canvas(canvas, cbuf);
 }
@@ -267,6 +289,7 @@ static void set_output_status(struct zmk_widget_status *widget,
     }
 
     draw_top(widget->obj, widget->cbuf, &widget->state);
+    draw_middle(widget->obj, widget->cbuf2, &widget->state);
     draw_bottom(widget->obj, widget->cbuf3, &widget->state);
 }
 
