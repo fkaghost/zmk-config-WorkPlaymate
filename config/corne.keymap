@@ -8,8 +8,8 @@
  * - First key on row 2: hold for 4 seconds to BT_CLR current profile
  *
  * Layer switching:
- * - Top-left on PLAY -> WORK
- * - Top-left on WORK -> PLAY
+ * - Top-left on PLAY  -> WORK
+ * - Top-left on WORK  -> PLAY
  * - Top-left on WORK2 -> PLAY
  */
 
@@ -22,10 +22,6 @@
 #define WORK2 2
 
 / {
-    /*
-     * &bt takes more parameters than a hold-tap can forward directly,
-     * so wrap BT_CLR in a zero-parameter macro.
-     */
     macros {
         bt_clear_macro: bt_clear_macro {
             compatible = "zmk,behavior-macro";
@@ -34,14 +30,6 @@
         };
     };
 
-    /*
-     * Tap: does nothing.
-     * Hold 4 seconds: invokes bt_clear_macro, which clears the
-     * currently selected Bluetooth profile.
-     *
-     * tap-preferred prevents another key press during the four-second
-     * window from prematurely resolving this as a hold.
-     */
     behaviors {
         bt_clear_hold: bt_clear_hold {
             compatible = "zmk,behavior-hold-tap";
@@ -60,10 +48,10 @@
          * LAYER 0 — PLAY
          * ============================================================
          *
-         * | WORK | BT 1 | BT 2 |   1   |   2   | BT NXT |
+         * | WORK |  1   |  2   |   3   |   4   | BT NXT |
          * | CLR* | TAB  |  Q   |   W   |   E   |   R    |
          * | MUTE | SHFT |  A   |   S   |   D   |   F    |
-         *                  | 3 | 4 | SPACE |
+         *                  | 5 | 6 | SPACE |
          *
          * CLR* = hold 4 seconds to clear current BT profile
          * RIGHT HALF = NONE
@@ -72,32 +60,17 @@
             display-name = "Play";
 
             bindings = <
-                /* Row 1 */
-                &to WORK       &bt BT_SEL 0   &bt BT_SEL 1
-                &kp N1         &kp N2         &bt BT_NXT
+                /* Row 1:  WORK     1         2         3         4         BT NXT       | right half */
+                &to WORK            &kp N1    &kp N2    &kp N3    &kp N4    &bt BT_NXT     &none &none &none &none &none &none
 
-                &none          &none          &none
-                &none          &none          &none
+                /* Row 2:  CLR*     TAB       Q         W         E         R            | right half */
+                &bt_clear_hold 0 0   &kp TAB   &kp Q     &kp W     &kp E     &kp R         &none &none &none &none &none &none
 
-                /* Row 2 */
-                &bt_clear_hold 0 0
-                &kp TAB        &kp Q
-                &kp W          &kp E           &kp R
+                /* Row 3:  MUTE     SHFT      A         S         D         F            | right half */
+                &kp C_MUTE          &kp LSHIFT &kp A    &kp S     &kp D     &kp F         &none &none &none &none &none &none
 
-                &none          &none          &none
-                &none          &none          &none
-
-                /* Row 3 */
-                &kp C_MUTE     &kp LSHIFT      &kp A
-                &kp S          &kp D           &kp F
-
-                &none          &none          &none
-                &none          &none          &none
-
-                /* Thumbs */
-                &kp N3         &kp N4          &kp SPACE
-
-                &none          &none          &none
+                /* Thumbs: 5        6         SPACE                                      | right half */
+                &kp N5              &kp N6     &kp SPACE                                   &none &none &none
             >;
         };
 
@@ -106,10 +79,10 @@
          * LAYER 1 — WORK
          * ============================================================
          *
-         * | PLAY | BT 1 | BT 2 | NONE | NONE | BT NXT |
-         * | CLR* | NONE | DEL  | HOME | END  | WIN+.  |
-         * | MUTE | BKSP | COPY | PASTE| SP.P | PRTSC  |
-         *                  | 3 | SPACE | LAYER 2 |
+         * | PLAY |  1   |  2   |   3   |   4   | BT NXT |
+         * | CLR* | NONE | DEL  | HOME  | END   | WIN+.  |
+         * | MUTE | BKSP | COPY | PASTE | SP.P  | PRTSC  |
+         *                | ENTER | SPACE | LAYER 2 |
          *
          * CLR* = hold 4 seconds to clear current BT profile
          * Special Paste = CTRL + SHIFT + V
@@ -119,32 +92,17 @@
             display-name = "Work";
 
             bindings = <
-                /* Row 1 */
-                &to PLAY       &bt BT_SEL 0   &bt BT_SEL 1
-                &none          &none          &bt BT_NXT
+                /* Row 1:  PLAY     1         2         3         4         BT NXT       | right half */
+                &to PLAY            &kp N1    &kp N2    &kp N3    &kp N4    &bt BT_NXT     &none &none &none &none &none &none
 
-                &none          &none          &none
-                &none          &none          &none
+                /* Row 2:  CLR*     NONE      DEL       HOME      END       WIN+.        | right half */
+                &bt_clear_hold 0 0   &none     &kp DELETE &kp HOME &kp END   &kp LG(DOT)    &none &none &none &none &none &none
 
-                /* Row 2 */
-                &bt_clear_hold 0 0
-                &none          &kp DELETE
-                &kp HOME       &kp END         &kp LG(DOT)
+                /* Row 3:  MUTE     BKSP      COPY      PASTE     SP.P      PRTSC        | right half */
+                &kp C_MUTE          &kp BACKSPACE &kp LC(C) &kp LC(V) &kp LC(LS(V)) &kp PRINTSCREEN  &none &none &none &none &none &none
 
-                &none          &none          &none
-                &none          &none          &none
-
-                /* Row 3 */
-                &kp C_MUTE     &kp BACKSPACE   &kp LC(C)
-                &kp LC(V)      &kp LC(LS(V))   &kp PRINTSCREEN
-
-                &none          &none          &none
-                &none          &none          &none
-
-                /* Thumbs */
-                &kp N3         &kp SPACE       &mo WORK2
-
-                &none          &none           &none
+                /* Thumbs: ENTER    SPACE     LAYER 2                                    | right half */
+                &kp ENTER           &kp SPACE  &mo WORK2                                   &none &none &none
             >;
         };
 
@@ -153,12 +111,14 @@
          * LAYER 2 — WORK 2
          * ============================================================
          *
-         * | PLAY | BT 1  | BT 2 | NONE | NONE | BT NXT |
-         * | CLR* | NONE  | NONE | SEL ALL | NONE | WIN+. |
-         * | MUTE | S+TAB | TAB  | BOLD | ITALIC | PRTSC |
-         *                   | NONE | NONE | THROUGH |
+         * | PLAY | NONE  | NONE | NONE    | NONE | BT NXT |
+         * | CLR* | NONE  | UNDO | SEL ALL | REDO | WIN+.  |
+         * | MUTE | S+TAB | TAB  | BOLD    | ITAL | PRTSC  |
+         *                  | NONE | NONE | THROUGH |
          *
          * CLR* = hold 4 seconds to clear current BT profile
+         * UNDO = CTRL + Z
+         * REDO = CTRL + Y
          * THROUGH = transparent to Layer 1
          * RIGHT HALF = NONE
          */
@@ -166,32 +126,17 @@
             display-name = "Work2";
 
             bindings = <
-                /* Row 1 */
-                &to PLAY       &bt BT_SEL 0   &bt BT_SEL 1
-                &none          &none          &bt BT_NXT
+                /* Row 1:  PLAY     NONE      NONE      NONE      NONE      BT NXT       | right half */
+                &to PLAY            &none      &none      &none      &none      &bt BT_NXT   &none &none &none &none &none &none
 
-                &none          &none          &none
-                &none          &none          &none
+                /* Row 2:  CLR*     NONE      UNDO      SEL ALL   REDO      WIN+.        | right half */
+                &bt_clear_hold 0 0   &none      &kp LC(Z)  &kp LC(A)  &kp LC(Y)  &kp LG(DOT)  &none &none &none &none &none &none
 
-                /* Row 2 */
-                &bt_clear_hold 0 0
-                &none          &none
-                &kp LC(A)      &none           &kp LG(DOT)
+                /* Row 3:  MUTE     S+TAB     TAB       BOLD      ITAL      PRTSC        | right half */
+                &kp C_MUTE          &kp LS(TAB) &kp TAB   &kp LC(B)  &kp LC(I)  &kp PRINTSCREEN  &none &none &none &none &none &none
 
-                &none          &none          &none
-                &none          &none          &none
-
-                /* Row 3 */
-                &kp C_MUTE     &kp LS(TAB)     &kp TAB
-                &kp LC(B)      &kp LC(I)       &kp PRINTSCREEN
-
-                &none          &none           &none
-                &none          &none           &none
-
-                /* Thumbs */
-                &none          &none           &trans
-
-                &none          &none           &none
+                /* Thumbs: NONE     NONE      THROUGH                                    | right half */
+                &none               &none      &trans                                      &none &none &none
             >;
         };
     };

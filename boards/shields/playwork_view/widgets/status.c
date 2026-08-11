@@ -2,22 +2,17 @@
  * WorkPlayMate custom nice!view screen
  * Target: ZMK v0.3 + nice!nano v2 + nice!view
  *
- * Physical display layout (68 x 160 after the stock nice!view rotation):
+ * PLAY:
+ *   battery + tiny percentage + active BT profile number
+ *   PLAY
+ *   larger plain ghost
+ *   Connected / Pairing
  *
- *   [battery] 87%                         1
- *
- *                 PLAY / WORK
- *
- *                 pixel ghost
- *
- *             Connected / Pairing
- *
- * Notes:
- * - Battery percentage is rendered with a hand-drawn 3x5 pixel font.
- * - Work2 intentionally displays as WORK.
- * - Only the active Bluetooth profile number (1 or 2) is shown.
- * - Any profile that is not currently connected is displayed as Pairing,
- *   per the requested two-state status display.
+ * WORK and WORK2:
+ *   battery + tiny percentage + active BT profile number
+ *   WORK
+ *   same larger ghost with clear-frame glasses
+ *   Connected / Pairing
  */
 
 #include <stdio.h>
@@ -54,39 +49,20 @@ struct layer_status_state {
     const char *label;
 };
 
-/* -------------------------------------------------------------------------- */
-/* General drawing helpers                                                     */
-/* -------------------------------------------------------------------------- */
-
 static void clear_canvas(lv_obj_t *canvas) {
     lv_draw_rect_dsc_t background;
     init_rect_dsc(&background, LVGL_BACKGROUND);
     lv_canvas_draw_rect(canvas, 0, 0, CANVAS_SIZE, CANVAS_SIZE, &background);
 }
 
-/*
- * Layer 2 (Work2) deliberately reports WORK.
- */
 static const char *mode_name(const struct status_state *state) {
-    switch (state->layer_index) {
-    case 0:
-        return "PLAY";
-    case 1:
-    case 2:
-        return "WORK";
-    default:
-        return "WORK";
-    }
+    return state->layer_index == 0 ? "PLAY" : "WORK";
 }
 
 /* -------------------------------------------------------------------------- */
 /* Tiny 3x5 battery percentage font                                            */
 /* -------------------------------------------------------------------------- */
 
-/*
- * Each glyph is 3 pixels wide by 5 pixels tall.
- * Bits 2..0 correspond to the left, middle, and right pixel.
- */
 static const uint8_t tiny_0[5] = {0x7, 0x5, 0x5, 0x5, 0x7};
 static const uint8_t tiny_1[5] = {0x2, 0x6, 0x2, 0x2, 0x7};
 static const uint8_t tiny_2[5] = {0x7, 0x1, 0x7, 0x4, 0x7};
@@ -150,16 +126,10 @@ static void draw_small_battery(lv_obj_t *canvas, uint8_t battery) {
     lv_draw_rect_dsc_t bg;
     init_rect_dsc(&bg, LVGL_BACKGROUND);
 
-    /*
-     * 12x8 battery body in the upper-left corner.
-     */
     lv_canvas_draw_rect(canvas, 2, 5, 12, 8, &fg);
     lv_canvas_draw_rect(canvas, 3, 6, 10, 6, &bg);
     lv_canvas_draw_rect(canvas, 14, 7, 2, 4, &fg);
 
-    /*
-     * Seven-pixel fill bar.
-     */
     uint8_t fill = (battery * 7 + 99) / 100;
     if (fill > 7) {
         fill = 7;
@@ -171,17 +141,14 @@ static void draw_small_battery(lv_obj_t *canvas, uint8_t battery) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Ghost from the supplied pixel-art reference                                 */
+/* Ghost                                                                       */
 /* -------------------------------------------------------------------------- */
 
 /*
- * 15 x 29 logical pixels derived from the supplied ghost.
- *
- * '#' = solid black pixel block
- * 'g' = light-gray area represented with a 25% monochrome dither
- * space = white / transparent
- *
- * Rendered at 2x scale => 30 x 58 pixels.
+ * 15x29 logical-pixel ghost derived from the supplied image.
+ * '#' = black
+ * 'g' = gray represented with monochrome dithering
+ * space = white
  */
 static const char ghost_rows[][16] = {
     "     #####     ",
@@ -215,59 +182,107 @@ static const char ghost_rows[][16] = {
     "     ## ##      ",
 };
 
-static void draw_ghost(lv_obj_t *canvas) {
-    const int scale = 2;
-    const int ghost_width = 15 * scale;
-    const int ghost_height = 29 * scale;
-    const int origin_x = (CANVAS_SIZE - ghost_width) / 2;
-    const int origin_y = (CANVAS_SIZE - ghost_height) / 2;
+/*
+ * Scale the 15x29 source to about 34x64 pixels inside the 68x68 canvas.
+ * This is slightly larger than the previous version.
+ */
+static int ghost_x(int logical_x) {
+    return 17 + (logical_x * 34) / 15;
+}
 
+static int ghost_y(int logical_y) {
+    return 2 + (logical_y * 64) / 29;
+}
+
+static void draw_ghost(lv_obj_t *canvas, bool with_glasses) {
     lv_draw_rect_dsc_t fg;
     init_rect_dsc(&fg, LVGL_FOREGROUND);
 
     for (int row = 0; row < 29; row++) {
+        int y0 = ghost_y(row);
+        int y1 = ghost_y(row + 1) - 1;
+
         for (int col = 0; col < 15; col++) {
+            int x0 = ghost_x(col);
+            int x1 = ghost_x(col + 1) - 1;
             char px = ghost_rows[row][col];
 
             if (px == '#') {
-                lv_canvas_draw_rect(canvas,
-                                    origin_x + col * scale,
-                                    origin_y + row * scale,
-                                    scale,
-                                    scale,
+                lv_canvas_draw_rect(canvas, x0, y0,
+                                    x1 - x0 + 1,
+                                    y1 - y0 + 1,
                                     &fg);
             } else if (px == 'g') {
-                /*
-                 * One black pixel out of each 2x2 logical cell produces
-                 * a subtle monochrome approximation of the gray shading.
-                 */
-                int dx = (row + col) & 1;
-                int dy = (row + col + 1) & 1;
-
-                lv_canvas_draw_rect(canvas,
-                                    origin_x + col * scale + dx,
-                                    origin_y + row * scale + dy,
-                                    1,
-                                    1,
-                                    &fg);
+                for (int y = y0; y <= y1; y++) {
+                    for (int x = x0; x <= x1; x++) {
+                        if (((x + y) & 1) == 0) {
+                            lv_canvas_draw_rect(canvas, x, y, 1, 1, &fg);
+                        }
+                    }
+                }
             }
         }
+    }
+
+    if (with_glasses) {
+        /*
+         * Normal clear-frame glasses:
+         * outlined lenses + bridge + short temple arms.
+         */
+        int left_x0  = ghost_x(3);
+        int left_x1  = ghost_x(8) - 1;
+        int right_x0 = ghost_x(8);
+        int right_x1 = ghost_x(13) - 1;
+        int top_y     = ghost_y(5);
+        int bottom_y  = ghost_y(10) - 1;
+
+        lv_draw_rect_dsc_t frame;
+        lv_draw_rect_dsc_init(&frame);
+        frame.bg_opa = LV_OPA_TRANSP;
+        frame.border_color = LVGL_FOREGROUND;
+        frame.border_width = 1;
+
+        lv_canvas_draw_rect(canvas,
+                            left_x0, top_y,
+                            left_x1 - left_x0 + 1,
+                            bottom_y - top_y + 1,
+                            &frame);
+
+        lv_canvas_draw_rect(canvas,
+                            right_x0, top_y,
+                            right_x1 - right_x0 + 1,
+                            bottom_y - top_y + 1,
+                            &frame);
+
+        int bridge_y = ghost_y(7);
+
+        lv_canvas_draw_rect(canvas,
+                            left_x1 + 1,
+                            bridge_y,
+                            right_x0 - left_x1 - 1,
+                            1,
+                            &fg);
+
+        lv_canvas_draw_rect(canvas,
+                            ghost_x(2),
+                            ghost_y(6),
+                            left_x0 - ghost_x(2),
+                            1,
+                            &fg);
+
+        lv_canvas_draw_rect(canvas,
+                            right_x1 + 1,
+                            ghost_y(6),
+                            ghost_x(14) - right_x1 - 1,
+                            1,
+                            &fg);
     }
 }
 
 /* -------------------------------------------------------------------------- */
-/* TOP CANVAS                                                                  */
+/* Top canvas                                                                  */
 /* -------------------------------------------------------------------------- */
 
-/*
- * Header:
- *
- * [battery] 87%                           1
- *
- *                 PLAY
- *
- * The standalone 1/2 is the currently selected Bluetooth profile.
- */
 static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], const struct status_state *state) {
     lv_obj_t *canvas = lv_obj_get_child(widget, 0);
     clear_canvas(canvas);
@@ -296,20 +311,22 @@ static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], const struct status_st
 }
 
 /* -------------------------------------------------------------------------- */
-/* MIDDLE CANVAS — static ghost                                                */
+/* Middle canvas                                                               */
 /* -------------------------------------------------------------------------- */
 
-static void draw_middle(lv_obj_t *widget, lv_color_t cbuf[]) {
+static void draw_middle(lv_obj_t *widget, lv_color_t cbuf[],
+                        const struct status_state *state) {
     lv_obj_t *canvas = lv_obj_get_child(widget, 1);
     clear_canvas(canvas);
 
-    draw_ghost(canvas);
+    /* Layer 0 = plain ghost. Layers 1 and 2 = glasses ghost. */
+    draw_ghost(canvas, state->layer_index != 0);
 
     rotate_canvas(canvas, cbuf);
 }
 
 /* -------------------------------------------------------------------------- */
-/* BOTTOM CANVAS — Connected / Pairing                                         */
+/* Bottom canvas                                                               */
 /* -------------------------------------------------------------------------- */
 
 static void draw_bottom(lv_obj_t *widget, lv_color_t cbuf[],
@@ -324,10 +341,6 @@ static void draw_bottom(lv_obj_t *widget, lv_color_t cbuf[],
     const char *status_text =
         state->active_profile_connected ? "Connected" : "Pairing";
 
-    /*
-     * Keep this near the visible edge because only ~24 pixels of the
-     * third stock nice!view canvas appear on the physical screen.
-     */
     lv_canvas_draw_text(canvas, 0, 5, CANVAS_SIZE, &status_dsc, status_text);
 
     rotate_canvas(canvas, cbuf);
@@ -384,10 +397,6 @@ static void set_output_status(struct zmk_widget_status *widget,
     widget->state.active_profile_index = state->active_profile_index;
     widget->state.active_profile_connected = state->active_profile_connected;
 
-    /*
-     * Bluetooth changes affect the profile number at the top and the
-     * Connected/Pairing label at the bottom.
-     */
     draw_top(widget->obj, widget->cbuf, &widget->state);
     draw_bottom(widget->obj, widget->cbuf3, &widget->state);
 }
@@ -426,6 +435,7 @@ static void set_layer_status(struct zmk_widget_status *widget,
     widget->state.layer_label = state.label;
 
     draw_top(widget->obj, widget->cbuf, &widget->state);
+    draw_middle(widget->obj, widget->cbuf2, &widget->state);
 }
 
 static void layer_status_update_cb(struct layer_status_state state) {
@@ -451,18 +461,13 @@ ZMK_DISPLAY_WIDGET_LISTENER(widget_layer_status, struct layer_status_state,
 ZMK_SUBSCRIPTION(widget_layer_status, zmk_layer_state_changed);
 
 /* -------------------------------------------------------------------------- */
-/* Widget initialization                                                       */
+/* Init                                                                        */
 /* -------------------------------------------------------------------------- */
 
 int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
     widget->obj = lv_obj_create(parent);
     lv_obj_set_size(widget->obj, 160, 68);
 
-    /*
-     * These three 68x68 canvases are the same placement strategy used by
-     * the working custom nice!view widget. rotate_canvas() handles the
-     * display's physical 90-degree orientation.
-     */
     lv_obj_t *top = lv_canvas_create(widget->obj);
     lv_obj_align(top, LV_ALIGN_TOP_RIGHT, 0, 0);
     lv_canvas_set_buffer(top, widget->cbuf, CANVAS_SIZE, CANVAS_SIZE,
@@ -479,11 +484,6 @@ int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
                          LV_IMG_CF_TRUE_COLOR);
 
     sys_slist_append(&widgets, &widget->node);
-
-    /*
-     * The ghost never changes, so draw it once.
-     */
-    draw_middle(widget->obj, widget->cbuf2);
 
     widget_battery_status_init();
     widget_output_status_init();
