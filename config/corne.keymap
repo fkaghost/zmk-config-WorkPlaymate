@@ -1,49 +1,77 @@
 /*
  * Custom Left-Side Corne Keymap
  * nice!nano v2 + nice!view
+ *
+ * Bluetooth:
+ * - Two host profiles only
+ * - BT_NXT cycles 1 <-> 2
+ * - PLAY: SPACE + BT_NXT clears current profile
+ * - WORK: SPACE + BT_NXT clears current profile
  */
 
 #include <behaviors.dtsi>
 #include <dt-bindings/zmk/keys.h>
 #include <dt-bindings/zmk/bt.h>
 
-
 #define PLAY  0
 #define WORK  1
 #define WORK2 2
 
-
 / {
+    /*
+     * Combo positions are based on the standard 42-key Corne ordering.
+     *
+     * Position 5  = top-row far-right key on the left half (BT_NXT)
+     * Position 38 = PLAY layer right thumb (SPACE)
+     * Position 37 = WORK layer middle thumb (SPACE)
+     *
+     * Combos are restricted by layer so the same physical positions do
+     * not accidentally clear Bluetooth from unrelated layers.
+     */
+    combos {
+        compatible = "zmk,combos";
+
+        bt_clear_play {
+            timeout-ms = <75>;
+            key-positions = <5 38>;
+            bindings = <&bt BT_CLR>;
+            layers = <PLAY>;
+        };
+
+        bt_clear_work {
+            timeout-ms = <75>;
+            key-positions = <5 37>;
+            bindings = <&bt BT_CLR>;
+            layers = <WORK>;
+        };
+    };
+
     keymap {
         compatible = "zmk,keymap";
-
 
         /*
          * ============================================================
          * LAYER 0 — PLAY
          * ============================================================
          *
-         * LEFT HALF
-         *
-         * | PLAY | BT 1 | BT 2 |   1   |   2   | BT CLR |
+         * | PLAY | BT 1 | BT 2 |   1   |   2   | BT NXT |
          * | WORK | TAB  |  Q   |   W   |   E   |   R    |
          * | MUTE | SHFT |  A   |   S   |   D   |   F    |
          *                  | 3 | 4 | SPACE |
          *
+         * SPACE + BT NXT = BT CLR (current profile)
          * RIGHT HALF = NONE
          */
-
         play_layer {
             display-name = "Play";
 
             bindings = <
                 /* Row 1 */
                 &to PLAY       &bt BT_SEL 0   &bt BT_SEL 1
-                &kp N1         &kp N2         &bt BT_CLR
+                &kp N1         &kp N2         &bt BT_NXT
 
                 &none          &none          &none
                 &none          &none          &none
-
 
                 /* Row 2 */
                 &to WORK       &kp TAB         &kp Q
@@ -52,14 +80,12 @@
                 &none          &none           &none
                 &none          &none           &none
 
-
                 /* Row 3 */
                 &kp C_MUTE     &kp LSHIFT      &kp A
                 &kp S          &kp D           &kp F
 
                 &none          &none           &none
                 &none          &none           &none
-
 
                 /* Thumbs */
                 &kp N3         &kp N4          &kp SPACE
@@ -68,34 +94,30 @@
             >;
         };
 
-
         /*
          * ============================================================
          * LAYER 1 — WORK
          * ============================================================
          *
-         * LEFT HALF
-         *
-         * | PLAY | BT 1 | BT 2 | NONE | NONE | BT CLR |
+         * | PLAY | BT 1 | BT 2 | NONE | NONE | BT NXT |
          * | WORK | NONE | DEL  | HOME | END  | WIN+.  |
          * | MUTE | BKSP | COPY | PASTE| SP.P | PRTSC  |
          *                  | 3 | SPACE | LAYER 2 |
          *
+         * SPACE + BT NXT = BT CLR (current profile)
          * Special Paste = CTRL + SHIFT + V
          * RIGHT HALF = NONE
          */
-
         work_layer {
             display-name = "Work";
 
             bindings = <
                 /* Row 1 */
                 &to PLAY       &bt BT_SEL 0   &bt BT_SEL 1
-                &none          &none          &bt BT_CLR
+                &none          &none          &bt BT_NXT
 
                 &none          &none          &none
                 &none          &none          &none
-
 
                 /* Row 2 */
                 &to WORK       &none           &kp DELETE
@@ -104,14 +126,12 @@
                 &none          &none           &none
                 &none          &none           &none
 
-
                 /* Row 3 */
                 &kp C_MUTE     &kp BACKSPACE   &kp LC(C)
                 &kp LC(V)      &kp LC(LS(V))   &kp PRINTSCREEN
 
                 &none          &none           &none
                 &none          &none           &none
-
 
                 /* Thumbs */
                 &kp N3         &kp SPACE       &mo WORK2
@@ -120,15 +140,12 @@
             >;
         };
 
-
         /*
          * ============================================================
          * LAYER 2 — WORK 2
          * ============================================================
          *
-         * LEFT HALF
-         *
-         * | PLAY | BT 1  | BT 2 | NONE | NONE | BT CLR |
+         * | PLAY | BT 1  | BT 2 | NONE | NONE | BT NXT |
          * | WORK | NONE  | NONE | SEL ALL | NONE | WIN+. |
          * | MUTE | S+TAB | TAB  | BOLD | ITALIC | PRTSC |
          *                   | NONE | NONE | THROUGH |
@@ -136,18 +153,16 @@
          * THROUGH = transparent to Layer 1
          * RIGHT HALF = NONE
          */
-
         work2_layer {
             display-name = "Work2";
 
             bindings = <
                 /* Row 1 */
                 &to PLAY       &bt BT_SEL 0   &bt BT_SEL 1
-                &none          &none          &bt BT_CLR
+                &none          &none          &bt BT_NXT
 
                 &none          &none          &none
                 &none          &none          &none
-
 
                 /* Row 2 */
                 &to WORK       &none           &none
@@ -156,14 +171,12 @@
                 &none          &none           &none
                 &none          &none           &none
 
-
                 /* Row 3 */
                 &kp C_MUTE     &kp LS(TAB)     &kp TAB
                 &kp LC(B)      &kp LC(I)       &kp PRINTSCREEN
 
                 &none          &none           &none
                 &none          &none           &none
-
 
                 /* Thumbs */
                 &none          &none           &trans
