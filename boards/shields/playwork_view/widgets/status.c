@@ -2,7 +2,7 @@
  * Simplified nice!view status screen for a single left-hand Corne.
  *
  * Screen blocks:
- *   TOP:    battery percentage + USB/Bluetooth connection
+ *   TOP:    battery percentage only
  *   MIDDLE: PLAY / WORK / WORK 2
  *   BOTTOM: Bluetooth profiles 1 and 2
  *
@@ -146,33 +146,23 @@ static void draw_profile_circle(lv_obj_t *canvas, const struct status_state *sta
 
 /*
  * TOP:
- * [battery] 87%                              BT 1
+ * [battery] 87%
+ *
+ * Intentionally battery-only. Bluetooth profile/USB state is not shown here.
  */
 static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], const struct status_state *state) {
     lv_obj_t *canvas = lv_obj_get_child(widget, 0);
     clear_canvas(canvas);
 
-    lv_draw_label_dsc_t left;
-    init_label_dsc(&left, LVGL_FOREGROUND, &lv_font_montserrat_14, LV_TEXT_ALIGN_LEFT);
-
-    lv_draw_label_dsc_t right;
-    init_label_dsc(&right, LVGL_FOREGROUND, &lv_font_montserrat_14, LV_TEXT_ALIGN_RIGHT);
+    lv_draw_label_dsc_t battery_label;
+    init_label_dsc(&battery_label, LVGL_FOREGROUND, &lv_font_montserrat_14,
+                   LV_TEXT_ALIGN_LEFT);
 
     draw_small_battery(canvas, state->battery);
 
     char battery_text[8] = {};
     snprintf(battery_text, sizeof(battery_text), "%u%%", state->battery);
-    lv_canvas_draw_text(canvas, 16, 3, 24, &left, battery_text);
-
-    char profile_text[10] = {};
-    if (state->selected_endpoint.transport == ZMK_TRANSPORT_USB) {
-        snprintf(profile_text, sizeof(profile_text), "USB");
-    } else {
-        snprintf(profile_text, sizeof(profile_text), "BT %d",
-                 state->active_profile_index + 1);
-    }
-
-    lv_canvas_draw_text(canvas, 38, 3, 30, &right, profile_text);
+    lv_canvas_draw_text(canvas, 16, 3, 32, &battery_label, battery_text);
 
     rotate_canvas(canvas, cbuf);
 }
@@ -288,7 +278,6 @@ static void set_output_status(struct zmk_widget_status *widget,
         widget->state.profiles_bonded[i] = state->profiles_bonded[i];
     }
 
-    draw_top(widget->obj, widget->cbuf, &widget->state);
     draw_middle(widget->obj, widget->cbuf2, &widget->state);
     draw_bottom(widget->obj, widget->cbuf3, &widget->state);
 }
