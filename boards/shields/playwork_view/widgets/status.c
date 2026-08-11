@@ -1,12 +1,23 @@
 /*
- * Simplified nice!view status screen for a single left-hand Corne.
+ * WorkPlayMate custom nice!view screen
+ * Target: ZMK v0.3 + nice!nano v2 + nice!view
  *
- * Screen blocks:
- *   TOP:    battery percentage only
- *   MIDDLE: PLAY / WORK / WORK 2
- *   BOTTOM: Bluetooth profiles 1 and 2
+ * Physical display layout (68 x 160 after the stock nice!view rotation):
  *
- * This file intentionally follows the ZMK v0.3 nice_view widget API.
+ *   [battery] 87%                         1
+ *
+ *                 PLAY / WORK
+ *
+ *                 pixel ghost
+ *
+ *             Connected / Pairing
+ *
+ * Notes:
+ * - Battery percentage is rendered with a hand-drawn 3x5 pixel font.
+ * - Work2 intentionally displays as WORK.
+ * - Only the active Bluetooth profile number (1 or 2) is shown.
+ * - Any profile that is not currently connected is displayed as Pairing,
+ *   per the requested two-state status display.
  */
 
 #include <stdio.h>
@@ -20,10 +31,8 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #include <zmk/battery.h>
 #include <zmk/ble.h>
 #include <zmk/display.h>
-#include <zmk/endpoints.h>
 #include <zmk/event_manager.h>
 #include <zmk/keymap.h>
-#include <zmk/usb.h>
 
 #include <zmk/events/battery_state_changed.h>
 #include <zmk/events/ble_active_profile_changed.h>
@@ -36,12 +45,8 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
 
 struct output_status_state {
-    struct zmk_endpoint_instance selected_endpoint;
     int active_profile_index;
     bool active_profile_connected;
-    bool active_profile_bonded;
-    bool profiles_connected[NICEVIEW_PROFILE_COUNT];
-    bool profiles_bonded[NICEVIEW_PROFILE_COUNT];
 };
 
 struct layer_status_state {
@@ -50,7 +55,7 @@ struct layer_status_state {
 };
 
 /* -------------------------------------------------------------------------- */
-/* Drawing helpers                                                             */
+/* General drawing helpers                                                     */
 /* -------------------------------------------------------------------------- */
 
 static void clear_canvas(lv_obj_t *canvas) {
@@ -59,25 +64,84 @@ static void clear_canvas(lv_obj_t *canvas) {
     lv_canvas_draw_rect(canvas, 0, 0, CANVAS_SIZE, CANVAS_SIZE, &background);
 }
 
+/*
+ * Layer 2 (Work2) deliberately reports WORK.
+ */
 static const char *mode_name(const struct status_state *state) {
-    /*
-     * These three names deliberately match this keyboard's three layers.
-     * For any future extra layer, fall back to its ZMK display-name.
-     */
     switch (state->layer_index) {
     case 0:
         return "PLAY";
     case 1:
-        return "WORK";
     case 2:
-        return "WORK 2";
+        return "WORK";
     default:
-        if (state->layer_label != NULL && strlen(state->layer_label) > 0) {
-            return state->layer_label;
-        }
-        return "LAYER";
+        return "WORK";
     }
 }
+
+/* -------------------------------------------------------------------------- */
+/* Tiny 3x5 battery percentage font                                            */
+/* -------------------------------------------------------------------------- */
+
+/*
+ * Each glyph is 3 pixels wide by 5 pixels tall.
+ * Bits 2..0 correspond to the left, middle, and right pixel.
+ */
+static const uint8_t tiny_0[5] = {0x7, 0x5, 0x5, 0x5, 0x7};
+static const uint8_t tiny_1[5] = {0x2, 0x6, 0x2, 0x2, 0x7};
+static const uint8_t tiny_2[5] = {0x7, 0x1, 0x7, 0x4, 0x7};
+static const uint8_t tiny_3[5] = {0x7, 0x1, 0x7, 0x1, 0x7};
+static const uint8_t tiny_4[5] = {0x5, 0x5, 0x7, 0x1, 0x1};
+static const uint8_t tiny_5[5] = {0x7, 0x4, 0x7, 0x1, 0x7};
+static const uint8_t tiny_6[5] = {0x7, 0x4, 0x7, 0x5, 0x7};
+static const uint8_t tiny_7[5] = {0x7, 0x1, 0x1, 0x1, 0x1};
+static const uint8_t tiny_8[5] = {0x7, 0x5, 0x7, 0x5, 0x7};
+static const uint8_t tiny_9[5] = {0x7, 0x5, 0x7, 0x1, 0x7};
+static const uint8_t tiny_pct[5] = {0x5, 0x1, 0x2, 0x4, 0x5};
+
+static const uint8_t *tiny_glyph(char ch) {
+    switch (ch) {
+    case '0': return tiny_0;
+    case '1': return tiny_1;
+    case '2': return tiny_2;
+    case '3': return tiny_3;
+    case '4': return tiny_4;
+    case '5': return tiny_5;
+    case '6': return tiny_6;
+    case '7': return tiny_7;
+    case '8': return tiny_8;
+    case '9': return tiny_9;
+    case '%': return tiny_pct;
+    default:  return NULL;
+    }
+}
+
+static void draw_tiny_text(lv_obj_t *canvas, int x, int y, const char *text) {
+    lv_draw_rect_dsc_t pixel;
+    init_rect_dsc(&pixel, LVGL_FOREGROUND);
+
+    int cursor_x = x;
+
+    for (size_t i = 0; text[i] != '\0'; i++) {
+        const uint8_t *glyph = tiny_glyph(text[i]);
+
+        if (glyph != NULL) {
+            for (int row = 0; row < 5; row++) {
+                for (int col = 0; col < 3; col++) {
+                    if (glyph[row] & (1 << (2 - col))) {
+                        lv_canvas_draw_rect(canvas, cursor_x + col, y + row, 1, 1, &pixel);
+                    }
+                }
+            }
+        }
+
+        cursor_x += 4;
+    }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Battery                                                                     */
+/* -------------------------------------------------------------------------- */
 
 static void draw_small_battery(lv_obj_t *canvas, uint8_t battery) {
     lv_draw_rect_dsc_t fg;
@@ -86,143 +150,191 @@ static void draw_small_battery(lv_obj_t *canvas, uint8_t battery) {
     lv_draw_rect_dsc_t bg;
     init_rect_dsc(&bg, LVGL_BACKGROUND);
 
-    lv_canvas_draw_rect(canvas, 1, 7, 11, 7, &fg);
-    lv_canvas_draw_rect(canvas, 2, 8, 9, 5, &bg);
-    lv_canvas_draw_rect(canvas, 12, 9, 2, 3, &fg);
+    /*
+     * 12x8 battery body in the upper-left corner.
+     */
+    lv_canvas_draw_rect(canvas, 2, 5, 12, 8, &fg);
+    lv_canvas_draw_rect(canvas, 3, 6, 10, 6, &bg);
+    lv_canvas_draw_rect(canvas, 14, 7, 2, 4, &fg);
 
+    /*
+     * Seven-pixel fill bar.
+     */
     uint8_t fill = (battery * 7 + 99) / 100;
     if (fill > 7) {
         fill = 7;
     }
+
     if (fill > 0) {
-        lv_canvas_draw_rect(canvas, 3, 9, fill, 3, &fg);
+        lv_canvas_draw_rect(canvas, 4, 8, fill, 2, &fg);
     }
 }
 
-static void draw_profile_circle(lv_obj_t *canvas, const struct status_state *state,
-                                int profile, int x, int y) {
-    bool selected = profile == state->active_profile_index;
-    bool connected = state->profiles_connected[profile];
-    bool bonded = state->profiles_bonded[profile];
-
-    lv_draw_arc_dsc_t outline;
-    init_arc_dsc(&outline, LVGL_FOREGROUND, 2);
-
-    lv_draw_arc_dsc_t selected_fill;
-    init_arc_dsc(&selected_fill, LVGL_FOREGROUND, 8);
-
-    lv_draw_label_dsc_t normal_text;
-    init_label_dsc(&normal_text, LVGL_FOREGROUND, &lv_font_montserrat_14,
-                   LV_TEXT_ALIGN_CENTER);
-
-    lv_draw_label_dsc_t selected_text;
-    init_label_dsc(&selected_text, LVGL_BACKGROUND, &lv_font_montserrat_14,
-                   LV_TEXT_ALIGN_CENTER);
-
-    if (connected) {
-        lv_canvas_draw_arc(canvas, x, y, 11, 0, 360, &outline);
-    } else if (bonded) {
-        const int segments = 8;
-        const int gap = 20;
-
-        for (int i = 0; i < segments; i++) {
-            lv_canvas_draw_arc(canvas, x, y, 11,
-                               (360 / segments) * i + gap / 2,
-                               (360 / segments) * (i + 1) - gap / 2,
-                               &outline);
-        }
-    }
-
-    if (selected) {
-        lv_canvas_draw_arc(canvas, x, y, 7, 0, 359, &selected_fill);
-    }
-
-    char label[2] = {};
-    snprintf(label, sizeof(label), "%d", profile + 1);
-
-    lv_canvas_draw_text(canvas, x - 7, y - 9, 14,
-                        selected ? &selected_text : &normal_text, label);
-}
+/* -------------------------------------------------------------------------- */
+/* Ghost from the supplied pixel-art reference                                 */
+/* -------------------------------------------------------------------------- */
 
 /*
- * TOP:
- * [battery] 87%
+ * 15 x 29 logical pixels derived from the supplied ghost.
  *
- * Intentionally battery-only. Bluetooth profile/USB state is not shown here.
+ * '#' = solid black pixel block
+ * 'g' = light-gray area represented with a 25% monochrome dither
+ * space = white / transparent
+ *
+ * Rendered at 2x scale => 30 x 58 pixels.
+ */
+static const char ghost_rows[][16] = {
+    "     #####     ",
+    "    #     #    ",
+    "   #       #   ",
+    "   #       #   ",
+    "  #         #  ",
+    "  #  ## ##  #  ",
+    "  #  ## ##  #  ",
+    "  #  ## ##  #  ",
+    "  #  ## ##  #  ",
+    "  #         #   ",
+    " #          #   ",
+    " #          #   ",
+    " #           #  ",
+    " #           #  ",
+    " #  #     #  #  ",
+    " #  #     #  #  ",
+    " #  #     #  #  ",
+    " #  #g    #g  # ",
+    "#g  #g    #g  # ",
+    "#g  #g    #g  # ",
+    "#g  #g    #g  # ",
+    "#g  #g    #g  # ",
+    "#g  #g    #g  # ",
+    "#g  #g    #g  # ",
+    "#gg #g    #g  # ",
+    "#gg #g    #g  # ",
+    "#ggg#g g  #ggg# ",
+    " ####gg#gg####  ",
+    "     ## ##      ",
+};
+
+static void draw_ghost(lv_obj_t *canvas) {
+    const int scale = 2;
+    const int ghost_width = 15 * scale;
+    const int ghost_height = 29 * scale;
+    const int origin_x = (CANVAS_SIZE - ghost_width) / 2;
+    const int origin_y = (CANVAS_SIZE - ghost_height) / 2;
+
+    lv_draw_rect_dsc_t fg;
+    init_rect_dsc(&fg, LVGL_FOREGROUND);
+
+    for (int row = 0; row < 29; row++) {
+        for (int col = 0; col < 15; col++) {
+            char px = ghost_rows[row][col];
+
+            if (px == '#') {
+                lv_canvas_draw_rect(canvas,
+                                    origin_x + col * scale,
+                                    origin_y + row * scale,
+                                    scale,
+                                    scale,
+                                    &fg);
+            } else if (px == 'g') {
+                /*
+                 * One black pixel out of each 2x2 logical cell produces
+                 * a subtle monochrome approximation of the gray shading.
+                 */
+                int dx = (row + col) & 1;
+                int dy = (row + col + 1) & 1;
+
+                lv_canvas_draw_rect(canvas,
+                                    origin_x + col * scale + dx,
+                                    origin_y + row * scale + dy,
+                                    1,
+                                    1,
+                                    &fg);
+            }
+        }
+    }
+}
+
+/* -------------------------------------------------------------------------- */
+/* TOP CANVAS                                                                  */
+/* -------------------------------------------------------------------------- */
+
+/*
+ * Header:
+ *
+ * [battery] 87%                           1
+ *
+ *                 PLAY
+ *
+ * The standalone 1/2 is the currently selected Bluetooth profile.
  */
 static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], const struct status_state *state) {
     lv_obj_t *canvas = lv_obj_get_child(widget, 0);
     clear_canvas(canvas);
 
-    lv_draw_label_dsc_t battery_label;
-    init_label_dsc(&battery_label, LVGL_FOREGROUND, &lv_font_montserrat_14,
-                   LV_TEXT_ALIGN_LEFT);
-
     draw_small_battery(canvas, state->battery);
 
     char battery_text[8] = {};
     snprintf(battery_text, sizeof(battery_text), "%u%%", state->battery);
-    lv_canvas_draw_text(canvas, 16, 3, 32, &battery_label, battery_text);
+    draw_tiny_text(canvas, 18, 7, battery_text);
 
-    rotate_canvas(canvas, cbuf);
-}
+    lv_draw_label_dsc_t profile_dsc;
+    init_label_dsc(&profile_dsc, LVGL_FOREGROUND, &lv_font_montserrat_18,
+                   LV_TEXT_ALIGN_CENTER);
 
-/*
- * MIDDLE:
- *                 PLAY
- *
- *            (1)          (2)
- */
-static void draw_middle(lv_obj_t *widget, lv_color_t cbuf[], const struct status_state *state) {
-    lv_obj_t *canvas = lv_obj_get_child(widget, 1);
-    clear_canvas(canvas);
+    char profile_text[2] = {};
+    snprintf(profile_text, sizeof(profile_text), "%d", state->active_profile_index + 1);
+    lv_canvas_draw_text(canvas, 49, 0, 18, &profile_dsc, profile_text);
 
-    lv_draw_label_dsc_t mode;
-    init_label_dsc(&mode, LVGL_FOREGROUND, &lv_font_montserrat_18, LV_TEXT_ALIGN_CENTER);
+    lv_draw_label_dsc_t mode_dsc;
+    init_label_dsc(&mode_dsc, LVGL_FOREGROUND, &lv_font_montserrat_18,
+                   LV_TEXT_ALIGN_CENTER);
 
-    lv_canvas_draw_text(canvas, 0, 3, CANVAS_SIZE, &mode, mode_name(state));
-
-    draw_profile_circle(canvas, state, 0, 19, 44);
-    draw_profile_circle(canvas, state, 1, 49, 44);
-
-    rotate_canvas(canvas, cbuf);
-}
-
-/*
- * BOTTOM:
- *              Connected
- *
- * The bottom canvas is partially clipped by the stock nice!view layout,
- * so only a short status label is placed here.
- */
-static void draw_bottom(lv_obj_t *widget, lv_color_t cbuf[], const struct status_state *state) {
-    lv_obj_t *canvas = lv_obj_get_child(widget, 2);
-    clear_canvas(canvas);
-
-    lv_draw_label_dsc_t status;
-    init_label_dsc(&status, LVGL_FOREGROUND, &lv_font_montserrat_14, LV_TEXT_ALIGN_CENTER);
-
-    const char *status_text = "Ready";
-
-    if (state->selected_endpoint.transport == ZMK_TRANSPORT_USB) {
-        status_text = "USB";
-    } else if (state->selected_endpoint.transport == ZMK_TRANSPORT_BLE) {
-        if (!state->active_profile_bonded) {
-            status_text = "Pairing";
-        } else if (state->active_profile_connected) {
-            status_text = "Connected";
-        } else {
-            status_text = "Offline";
-        }
-    }
-
-    lv_canvas_draw_text(canvas, 0, 4, CANVAS_SIZE, &status, status_text);
+    lv_canvas_draw_text(canvas, 0, 35, CANVAS_SIZE, &mode_dsc, mode_name(state));
 
     rotate_canvas(canvas, cbuf);
 }
 
 /* -------------------------------------------------------------------------- */
-/* Battery                                                                     */
+/* MIDDLE CANVAS — static ghost                                                */
+/* -------------------------------------------------------------------------- */
+
+static void draw_middle(lv_obj_t *widget, lv_color_t cbuf[]) {
+    lv_obj_t *canvas = lv_obj_get_child(widget, 1);
+    clear_canvas(canvas);
+
+    draw_ghost(canvas);
+
+    rotate_canvas(canvas, cbuf);
+}
+
+/* -------------------------------------------------------------------------- */
+/* BOTTOM CANVAS — Connected / Pairing                                         */
+/* -------------------------------------------------------------------------- */
+
+static void draw_bottom(lv_obj_t *widget, lv_color_t cbuf[],
+                        const struct status_state *state) {
+    lv_obj_t *canvas = lv_obj_get_child(widget, 2);
+    clear_canvas(canvas);
+
+    lv_draw_label_dsc_t status_dsc;
+    init_label_dsc(&status_dsc, LVGL_FOREGROUND, &lv_font_montserrat_10,
+                   LV_TEXT_ALIGN_CENTER);
+
+    const char *status_text =
+        state->active_profile_connected ? "Connected" : "Pairing";
+
+    /*
+     * Keep this near the visible edge because only ~24 pixels of the
+     * third stock nice!view canvas appear on the physical screen.
+     */
+    lv_canvas_draw_text(canvas, 0, 5, CANVAS_SIZE, &status_dsc, status_text);
+
+    rotate_canvas(canvas, cbuf);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Battery listener                                                            */
 /* -------------------------------------------------------------------------- */
 
 static void set_battery_status(struct zmk_widget_status *widget,
@@ -237,6 +349,7 @@ static void set_battery_status(struct zmk_widget_status *widget,
 
 static void battery_status_update_cb(struct battery_status_state state) {
     struct zmk_widget_status *widget;
+
     SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) {
         set_battery_status(widget, state);
     }
@@ -263,46 +376,35 @@ ZMK_SUBSCRIPTION(widget_battery_status, zmk_usb_conn_state_changed);
 #endif
 
 /* -------------------------------------------------------------------------- */
-/* Bluetooth / output                                                          */
+/* Bluetooth listener                                                          */
 /* -------------------------------------------------------------------------- */
 
 static void set_output_status(struct zmk_widget_status *widget,
                               const struct output_status_state *state) {
-    widget->state.selected_endpoint = state->selected_endpoint;
     widget->state.active_profile_index = state->active_profile_index;
     widget->state.active_profile_connected = state->active_profile_connected;
-    widget->state.active_profile_bonded = state->active_profile_bonded;
 
-    for (int i = 0; i < NICEVIEW_PROFILE_COUNT; i++) {
-        widget->state.profiles_connected[i] = state->profiles_connected[i];
-        widget->state.profiles_bonded[i] = state->profiles_bonded[i];
-    }
-
-    draw_middle(widget->obj, widget->cbuf2, &widget->state);
+    /*
+     * Bluetooth changes affect the profile number at the top and the
+     * Connected/Pairing label at the bottom.
+     */
+    draw_top(widget->obj, widget->cbuf, &widget->state);
     draw_bottom(widget->obj, widget->cbuf3, &widget->state);
 }
 
 static void output_status_update_cb(struct output_status_state state) {
     struct zmk_widget_status *widget;
+
     SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) {
         set_output_status(widget, &state);
     }
 }
 
 static struct output_status_state output_status_get_state(const zmk_event_t *_eh) {
-    struct output_status_state state = {
-        .selected_endpoint = zmk_endpoints_selected(),
+    return (struct output_status_state){
         .active_profile_index = zmk_ble_active_profile_index(),
         .active_profile_connected = zmk_ble_active_profile_is_connected(),
-        .active_profile_bonded = !zmk_ble_active_profile_is_open(),
     };
-
-    for (int i = 0; i < MIN(NICEVIEW_PROFILE_COUNT, ZMK_BLE_PROFILE_COUNT); i++) {
-        state.profiles_connected[i] = zmk_ble_profile_is_connected(i);
-        state.profiles_bonded[i] = !zmk_ble_profile_is_open(i);
-    }
-
-    return state;
 }
 
 ZMK_DISPLAY_WIDGET_LISTENER(widget_output_status, struct output_status_state,
@@ -310,16 +412,12 @@ ZMK_DISPLAY_WIDGET_LISTENER(widget_output_status, struct output_status_state,
 
 ZMK_SUBSCRIPTION(widget_output_status, zmk_endpoint_changed);
 
-#if IS_ENABLED(CONFIG_USB_DEVICE_STACK)
-ZMK_SUBSCRIPTION(widget_output_status, zmk_usb_conn_state_changed);
-#endif
-
 #if defined(CONFIG_ZMK_BLE)
 ZMK_SUBSCRIPTION(widget_output_status, zmk_ble_active_profile_changed);
 #endif
 
 /* -------------------------------------------------------------------------- */
-/* Layer / mode                                                                */
+/* Layer listener                                                              */
 /* -------------------------------------------------------------------------- */
 
 static void set_layer_status(struct zmk_widget_status *widget,
@@ -327,11 +425,12 @@ static void set_layer_status(struct zmk_widget_status *widget,
     widget->state.layer_index = state.index;
     widget->state.layer_label = state.label;
 
-    draw_middle(widget->obj, widget->cbuf2, &widget->state);
+    draw_top(widget->obj, widget->cbuf, &widget->state);
 }
 
 static void layer_status_update_cb(struct layer_status_state state) {
     struct zmk_widget_status *widget;
+
     SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) {
         set_layer_status(widget, state);
     }
@@ -359,6 +458,11 @@ int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
     widget->obj = lv_obj_create(parent);
     lv_obj_set_size(widget->obj, 160, 68);
 
+    /*
+     * These three 68x68 canvases are the same placement strategy used by
+     * the working custom nice!view widget. rotate_canvas() handles the
+     * display's physical 90-degree orientation.
+     */
     lv_obj_t *top = lv_canvas_create(widget->obj);
     lv_obj_align(top, LV_ALIGN_TOP_RIGHT, 0, 0);
     lv_canvas_set_buffer(top, widget->cbuf, CANVAS_SIZE, CANVAS_SIZE,
@@ -375,6 +479,11 @@ int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
                          LV_IMG_CF_TRUE_COLOR);
 
     sys_slist_append(&widgets, &widget->node);
+
+    /*
+     * The ghost never changes, so draw it once.
+     */
+    draw_middle(widget->obj, widget->cbuf2);
 
     widget_battery_status_init();
     widget_output_status_init();
