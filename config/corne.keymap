@@ -1,12 +1,16 @@
 /*
- * Custom Left-Side Corne Keymap
+ * WorkPlayMate - Left-Side Corne Keymap
  * nice!nano v2 + nice!view
  *
  * Bluetooth:
- * - Two host profiles only
- * - BT_NXT cycles 1 <-> 2
- * - PLAY: SPACE + BT_NXT clears current profile
- * - WORK: SPACE + BT_NXT clears current profile
+ * - Two host profiles (configured in corne.conf)
+ * - BT_NXT cycles between profiles 1 and 2
+ * - First key on row 2: hold for 4 seconds to BT_CLR current profile
+ *
+ * Layer switching:
+ * - Top-left on PLAY -> WORK
+ * - Top-left on WORK -> PLAY
+ * - Top-left on WORK2 -> PLAY
  */
 
 #include <behaviors.dtsi>
@@ -19,30 +23,32 @@
 
 / {
     /*
-     * Combo positions are based on the standard 42-key Corne ordering.
-     *
-     * Position 5  = top-row far-right key on the left half (BT_NXT)
-     * Position 38 = PLAY layer right thumb (SPACE)
-     * Position 37 = WORK layer middle thumb (SPACE)
-     *
-     * Combos are restricted by layer so the same physical positions do
-     * not accidentally clear Bluetooth from unrelated layers.
+     * &bt takes more parameters than a hold-tap can forward directly,
+     * so wrap BT_CLR in a zero-parameter macro.
      */
-    combos {
-        compatible = "zmk,combos";
-
-        bt_clear_play {
-            timeout-ms = <75>;
-            key-positions = <5 38>;
+    macros {
+        bt_clear_macro: bt_clear_macro {
+            compatible = "zmk,behavior-macro";
+            #binding-cells = <0>;
             bindings = <&bt BT_CLR>;
-            layers = <PLAY>;
         };
+    };
 
-        bt_clear_work {
-            timeout-ms = <75>;
-            key-positions = <5 37>;
-            bindings = <&bt BT_CLR>;
-            layers = <WORK>;
+    /*
+     * Tap: does nothing.
+     * Hold 4 seconds: invokes bt_clear_macro, which clears the
+     * currently selected Bluetooth profile.
+     *
+     * tap-preferred prevents another key press during the four-second
+     * window from prematurely resolving this as a hold.
+     */
+    behaviors {
+        bt_clear_hold: bt_clear_hold {
+            compatible = "zmk,behavior-hold-tap";
+            #binding-cells = <2>;
+            flavor = "tap-preferred";
+            tapping-term-ms = <4000>;
+            bindings = <&bt_clear_macro>, <&none>;
         };
     };
 
@@ -54,12 +60,12 @@
          * LAYER 0 — PLAY
          * ============================================================
          *
-         * | PLAY | BT 1 | BT 2 |   1   |   2   | BT NXT |
-         * | WORK | TAB  |  Q   |   W   |   E   |   R    |
+         * | WORK | BT 1 | BT 2 |   1   |   2   | BT NXT |
+         * | CLR* | TAB  |  Q   |   W   |   E   |   R    |
          * | MUTE | SHFT |  A   |   S   |   D   |   F    |
          *                  | 3 | 4 | SPACE |
          *
-         * SPACE + BT NXT = BT CLR (current profile)
+         * CLR* = hold 4 seconds to clear current BT profile
          * RIGHT HALF = NONE
          */
         play_layer {
@@ -67,30 +73,31 @@
 
             bindings = <
                 /* Row 1 */
-                &to PLAY       &bt BT_SEL 0   &bt BT_SEL 1
+                &to WORK       &bt BT_SEL 0   &bt BT_SEL 1
                 &kp N1         &kp N2         &bt BT_NXT
 
                 &none          &none          &none
                 &none          &none          &none
 
                 /* Row 2 */
-                &to WORK       &kp TAB         &kp Q
+                &bt_clear_hold 0 0
+                &kp TAB        &kp Q
                 &kp W          &kp E           &kp R
 
-                &none          &none           &none
-                &none          &none           &none
+                &none          &none          &none
+                &none          &none          &none
 
                 /* Row 3 */
                 &kp C_MUTE     &kp LSHIFT      &kp A
                 &kp S          &kp D           &kp F
 
-                &none          &none           &none
-                &none          &none           &none
+                &none          &none          &none
+                &none          &none          &none
 
                 /* Thumbs */
                 &kp N3         &kp N4          &kp SPACE
 
-                &none          &none           &none
+                &none          &none          &none
             >;
         };
 
@@ -100,11 +107,11 @@
          * ============================================================
          *
          * | PLAY | BT 1 | BT 2 | NONE | NONE | BT NXT |
-         * | WORK | NONE | DEL  | HOME | END  | WIN+.  |
+         * | CLR* | NONE | DEL  | HOME | END  | WIN+.  |
          * | MUTE | BKSP | COPY | PASTE| SP.P | PRTSC  |
          *                  | 3 | SPACE | LAYER 2 |
          *
-         * SPACE + BT NXT = BT CLR (current profile)
+         * CLR* = hold 4 seconds to clear current BT profile
          * Special Paste = CTRL + SHIFT + V
          * RIGHT HALF = NONE
          */
@@ -120,18 +127,19 @@
                 &none          &none          &none
 
                 /* Row 2 */
-                &to WORK       &none           &kp DELETE
+                &bt_clear_hold 0 0
+                &none          &kp DELETE
                 &kp HOME       &kp END         &kp LG(DOT)
 
-                &none          &none           &none
-                &none          &none           &none
+                &none          &none          &none
+                &none          &none          &none
 
                 /* Row 3 */
                 &kp C_MUTE     &kp BACKSPACE   &kp LC(C)
                 &kp LC(V)      &kp LC(LS(V))   &kp PRINTSCREEN
 
-                &none          &none           &none
-                &none          &none           &none
+                &none          &none          &none
+                &none          &none          &none
 
                 /* Thumbs */
                 &kp N3         &kp SPACE       &mo WORK2
@@ -146,10 +154,11 @@
          * ============================================================
          *
          * | PLAY | BT 1  | BT 2 | NONE | NONE | BT NXT |
-         * | WORK | NONE  | NONE | SEL ALL | NONE | WIN+. |
+         * | CLR* | NONE  | NONE | SEL ALL | NONE | WIN+. |
          * | MUTE | S+TAB | TAB  | BOLD | ITALIC | PRTSC |
          *                   | NONE | NONE | THROUGH |
          *
+         * CLR* = hold 4 seconds to clear current BT profile
          * THROUGH = transparent to Layer 1
          * RIGHT HALF = NONE
          */
@@ -165,11 +174,12 @@
                 &none          &none          &none
 
                 /* Row 2 */
-                &to WORK       &none           &none
+                &bt_clear_hold 0 0
+                &none          &none
                 &kp LC(A)      &none           &kp LG(DOT)
 
-                &none          &none           &none
-                &none          &none           &none
+                &none          &none          &none
+                &none          &none          &none
 
                 /* Row 3 */
                 &kp C_MUTE     &kp LS(TAB)     &kp TAB
