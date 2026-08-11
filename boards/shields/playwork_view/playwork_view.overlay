@@ -1,0 +1,24 @@
+/*
+ * Play/Work nice!view shield.
+ *
+ * Hardware definition intentionally matches ZMK v0.3's stock nice_view
+ * shield. The nice_view_adapter shield supplies the &nice_view_spi bus.
+ */
+
+&nice_view_spi {
+    status = "okay";
+
+    playwork_nice_view: ls0xx@0 {
+        compatible = "sharp,ls0xx";
+        spi-max-frequency = <1000000>;
+        reg = <0>;
+        width = <160>;
+        height = <68>;
+    };
+};
+
+/ {
+    chosen {
+        zephyr,display = &playwork_nice_view;
+    };
+};

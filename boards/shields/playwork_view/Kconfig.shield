@@ -1,0 +1,2 @@
+config SHIELD_PLAYWORK_VIEW
+    def_bool $(shields_list_contains,playwork_view)
