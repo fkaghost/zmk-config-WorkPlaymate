@@ -1,14 +1,12 @@
 /*
  * WorkPlayMate custom nice!view screen
  *
- * Ghost artwork is stored separately in:
- *   ghost_play.h
- *   ghost_work.h
+ * PLAY, WORK, and WORK2 all use the same shared 15x29 ghost.
  *
- * Sprite legend:
- *   W = white
- *   . = black
- *   + = gray/dithered
+ * Ghost legend:
+ *   # = solid black
+ *   g = light-gray area rendered as sparse monochrome dither
+ *   space = white / transparent
  */
 
 #include <stdio.h>
@@ -32,8 +30,6 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #include <zmk/events/usb_conn_state_changed.h>
 
 #include "status.h"
-#include "ghost_play.h"
-#include "ghost_work.h"
 
 static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
 
@@ -129,47 +125,81 @@ static void draw_large_battery(lv_obj_t *canvas, uint8_t battery) {
 }
 
 /*
- * Generic renderer for editable ghost headers.
+ * 15 x 29 logical pixels derived from the supplied ghost.
  *
- * W = explicitly white. Because clear_canvas() already made the
- * background white, W normally requires no drawing.
- * . = black
- * + = checkerboard dither to simulate gray
+ * '#' = solid black pixel block
+ * 'g' = light-gray area represented with a 25% monochrome dither
+ * space = white / transparent
+ *
+ * Rendered at 2x scale => 30 x 58 pixels.
  */
-static void draw_ghost(lv_obj_t *canvas,
-                       const char *const rows[],
-                       int logical_width,
-                       int logical_height,
-                       int origin_x,
-                       int origin_y,
-                       int render_width,
-                       int render_height) {
+static const char ghost_rows[][16] = {
+    "     #####     ",
+    "    #     #    ",
+    "   #       #   ",
+    "   #       #   ",
+    "  #         #  ",
+    "  #  ## ##  #  ",
+    "  #  ## ##  #  ",
+    "  #  ## ##  #  ",
+    "  #  ## ##  #  ",
+    "  #         #   ",
+    " #          #   ",
+    " #          #   ",
+    " #           #  ",
+    " #           #  ",
+    " #  #     #  #  ",
+    " #  #     #  #  ",
+    " #  #     #  #  ",
+    " #  #g    #g  # ",
+    "#g  #g    #g  # ",
+    "#g  #g    #g  # ",
+    "#g  #g    #g  # ",
+    "#g  #g    #g  # ",
+    "#g  #g    #g  # ",
+    "#g  #g    #g  # ",
+    "#gg #g    #g  # ",
+    "#gg #g    #g  # ",
+    "#ggg#g g  #ggg# ",
+    " ####gg#gg####  ",
+    "     ## ##      ",
+};
+
+static void draw_ghost(lv_obj_t *canvas) {
+    const int scale = 2;
+    const int ghost_width = 15 * scale;
+    const int ghost_height = 29 * scale;
+    const int origin_x = (CANVAS_SIZE - ghost_width) / 2;
+    const int origin_y = (CANVAS_SIZE - ghost_height) / 2;
+
     lv_draw_rect_dsc_t fg;
     init_rect_dsc(&fg, LVGL_FOREGROUND);
 
-    for (int row = 0; row < logical_height; row++) {
-        int y0 = origin_y + (row * render_height) / logical_height;
-        int y1 = origin_y + ((row + 1) * render_height) / logical_height - 1;
+    for (int row = 0; row < 29; row++) {
+        for (int col = 0; col < 15; col++) {
+            char px = ghost_rows[row][col];
 
-        for (int col = 0; col < logical_width; col++) {
-            int x0 = origin_x + (col * render_width) / logical_width;
-            int x1 = origin_x + ((col + 1) * render_width) / logical_width - 1;
-
-            char px = rows[row][col];
-
-            if (px == '.') {
-                lv_canvas_draw_rect(canvas, x0, y0,
-                                    x1 - x0 + 1,
-                                    y1 - y0 + 1,
+            if (px == '#') {
+                lv_canvas_draw_rect(canvas,
+                                    origin_x + col * scale,
+                                    origin_y + row * scale,
+                                    scale,
+                                    scale,
                                     &fg);
-            } else if (px == '+') {
-                for (int y = y0; y <= y1; y++) {
-                    for (int x = x0; x <= x1; x++) {
-                        if (((x + y) & 1) == 0) {
-                            lv_canvas_draw_rect(canvas, x, y, 1, 1, &fg);
-                        }
-                    }
-                }
+            } else if (px == 'g') {
+                /*
+                 * One black pixel out of each 2x2 logical cell produces
+                 * a subtle monochrome approximation of the gray shading.
+                 */
+                int dx = (row + col) & 1;
+                int dy = (row + col + 1) & 1;
+
+                lv_canvas_draw_rect(canvas,
+                                    origin_x + col * scale + dx,
+                                    origin_y + row * scale + dy,
+                                    1,
+                                    1,
+                                    &fg);
             }
         }
     }
@@ -209,28 +239,13 @@ static void draw_top(lv_obj_t *widget, lv_color_t cbuf[],
 
 static void draw_middle(lv_obj_t *widget, lv_color_t cbuf[],
                         const struct status_state *state) {
+    ARG_UNUSED(state);
+
     lv_obj_t *canvas = lv_obj_get_child(widget, 1);
     clear_canvas(canvas);
 
-    if (state->layer_index == 0) {
-        draw_ghost(canvas,
-                   play_ghost_rows,
-                   PLAY_GHOST_WIDTH,
-                   PLAY_GHOST_HEIGHT,
-                   PLAY_GHOST_X,
-                   PLAY_GHOST_Y,
-                   PLAY_GHOST_RENDER_WIDTH,
-                   PLAY_GHOST_RENDER_HEIGHT);
-    } else {
-        draw_ghost(canvas,
-                   work_ghost_rows,
-                   WORK_GHOST_WIDTH,
-                   WORK_GHOST_HEIGHT,
-                   WORK_GHOST_X,
-                   WORK_GHOST_Y,
-                   WORK_GHOST_RENDER_WIDTH,
-                   WORK_GHOST_RENDER_HEIGHT);
-    }
+    /* Same ghost for PLAY, WORK, and WORK2. */
+    draw_ghost(canvas);
 
     rotate_canvas(canvas, cbuf);
 }
