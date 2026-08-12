@@ -1,18 +1,6 @@
 /*
  * WorkPlayMate custom nice!view screen
  * Target: ZMK v0.3 + nice!nano v2 + nice!view
- *
- * PLAY:
- *   battery + tiny percentage + active BT profile number
- *   PLAY
- *   larger plain ghost
- *   Connected / Pairing
- *
- * WORK and WORK2:
- *   battery + tiny percentage + active BT profile number
- *   WORK
- *   same larger ghost with clear-frame glasses
- *   Connected / Pairing
  */
 
 #include <stdio.h>
@@ -59,98 +47,77 @@ static const char *mode_name(const struct status_state *state) {
     return state->layer_index == 0 ? "PLAY" : "WORK";
 }
 
-/* -------------------------------------------------------------------------- */
-/* Tiny 3x5 battery percentage font                                            */
-/* -------------------------------------------------------------------------- */
+/* 4x7 pixel font for the battery percentage */
+static const uint8_t px7_0[7] = {0x6, 0x9, 0x9, 0x9, 0x9, 0x9, 0x6};
+static const uint8_t px7_1[7] = {0x2, 0x6, 0x2, 0x2, 0x2, 0x2, 0x7};
+static const uint8_t px7_2[7] = {0xE, 0x1, 0x1, 0x6, 0x8, 0x8, 0xF};
+static const uint8_t px7_3[7] = {0xE, 0x1, 0x1, 0x6, 0x1, 0x1, 0xE};
+static const uint8_t px7_4[7] = {0x9, 0x9, 0x9, 0xF, 0x1, 0x1, 0x1};
+static const uint8_t px7_5[7] = {0xF, 0x8, 0x8, 0xE, 0x1, 0x1, 0xE};
+static const uint8_t px7_6[7] = {0x6, 0x8, 0x8, 0xE, 0x9, 0x9, 0x6};
+static const uint8_t px7_7[7] = {0xF, 0x1, 0x1, 0x2, 0x2, 0x2, 0x2};
+static const uint8_t px7_8[7] = {0x6, 0x9, 0x9, 0x6, 0x9, 0x9, 0x6};
+static const uint8_t px7_9[7] = {0x6, 0x9, 0x9, 0x7, 0x1, 0x1, 0x6};
+static const uint8_t px7_pct[7] = {0x9, 0x1, 0x2, 0x2, 0x4, 0x8, 0x9};
 
-static const uint8_t tiny_0[5] = {0x7, 0x5, 0x5, 0x5, 0x7};
-static const uint8_t tiny_1[5] = {0x2, 0x6, 0x2, 0x2, 0x7};
-static const uint8_t tiny_2[5] = {0x7, 0x1, 0x7, 0x4, 0x7};
-static const uint8_t tiny_3[5] = {0x7, 0x1, 0x7, 0x1, 0x7};
-static const uint8_t tiny_4[5] = {0x5, 0x5, 0x7, 0x1, 0x1};
-static const uint8_t tiny_5[5] = {0x7, 0x4, 0x7, 0x1, 0x7};
-static const uint8_t tiny_6[5] = {0x7, 0x4, 0x7, 0x5, 0x7};
-static const uint8_t tiny_7[5] = {0x7, 0x1, 0x1, 0x1, 0x1};
-static const uint8_t tiny_8[5] = {0x7, 0x5, 0x7, 0x5, 0x7};
-static const uint8_t tiny_9[5] = {0x7, 0x5, 0x7, 0x1, 0x7};
-static const uint8_t tiny_pct[5] = {0x5, 0x1, 0x2, 0x4, 0x5};
-
-static const uint8_t *tiny_glyph(char ch) {
+static const uint8_t *px7_glyph(char ch) {
     switch (ch) {
-    case '0': return tiny_0;
-    case '1': return tiny_1;
-    case '2': return tiny_2;
-    case '3': return tiny_3;
-    case '4': return tiny_4;
-    case '5': return tiny_5;
-    case '6': return tiny_6;
-    case '7': return tiny_7;
-    case '8': return tiny_8;
-    case '9': return tiny_9;
-    case '%': return tiny_pct;
+    case '0': return px7_0;
+    case '1': return px7_1;
+    case '2': return px7_2;
+    case '3': return px7_3;
+    case '4': return px7_4;
+    case '5': return px7_5;
+    case '6': return px7_6;
+    case '7': return px7_7;
+    case '8': return px7_8;
+    case '9': return px7_9;
+    case '%': return px7_pct;
     default:  return NULL;
     }
 }
 
-static void draw_tiny_text(lv_obj_t *canvas, int x, int y, const char *text) {
+static void draw_px7_text(lv_obj_t *canvas, int x, int y, const char *text) {
     lv_draw_rect_dsc_t pixel;
     init_rect_dsc(&pixel, LVGL_FOREGROUND);
 
     int cursor_x = x;
-
     for (size_t i = 0; text[i] != '\0'; i++) {
-        const uint8_t *glyph = tiny_glyph(text[i]);
-
+        const uint8_t *glyph = px7_glyph(text[i]);
         if (glyph != NULL) {
-            for (int row = 0; row < 5; row++) {
-                for (int col = 0; col < 3; col++) {
-                    if (glyph[row] & (1 << (2 - col))) {
+            for (int row = 0; row < 7; row++) {
+                for (int col = 0; col < 4; col++) {
+                    if (glyph[row] & (1 << (3 - col))) {
                         lv_canvas_draw_rect(canvas, cursor_x + col, y + row, 1, 1, &pixel);
                     }
                 }
             }
         }
-
-        cursor_x += 4;
+        cursor_x += 5;
     }
 }
 
-/* -------------------------------------------------------------------------- */
-/* Battery                                                                     */
-/* -------------------------------------------------------------------------- */
-
-static void draw_small_battery(lv_obj_t *canvas, uint8_t battery) {
+static void draw_large_battery(lv_obj_t *canvas, uint8_t battery) {
     lv_draw_rect_dsc_t fg;
     init_rect_dsc(&fg, LVGL_FOREGROUND);
 
     lv_draw_rect_dsc_t bg;
     init_rect_dsc(&bg, LVGL_BACKGROUND);
 
-    lv_canvas_draw_rect(canvas, 2, 5, 12, 8, &fg);
-    lv_canvas_draw_rect(canvas, 3, 6, 10, 6, &bg);
-    lv_canvas_draw_rect(canvas, 14, 7, 2, 4, &fg);
+    lv_canvas_draw_rect(canvas, 1, 3, 15, 10, &fg);
+    lv_canvas_draw_rect(canvas, 2, 4, 13, 8, &bg);
+    lv_canvas_draw_rect(canvas, 16, 6, 2, 4, &fg);
 
-    uint8_t fill = (battery * 7 + 99) / 100;
-    if (fill > 7) {
-        fill = 7;
+    uint8_t fill = (battery * 9 + 99) / 100;
+    if (fill > 9) {
+        fill = 9;
     }
-
     if (fill > 0) {
-        lv_canvas_draw_rect(canvas, 4, 8, fill, 2, &fg);
+        lv_canvas_draw_rect(canvas, 4, 7, fill, 2, &fg);
     }
 }
 
-/* -------------------------------------------------------------------------- */
-/* Ghost                                                                       */
-/* -------------------------------------------------------------------------- */
-
-/*
- * 15x29 logical-pixel ghost derived from the supplied image.
- * '#' = black
- * 'g' = gray represented with monochrome dithering
- * space = white
- */
-static const char ghost_rows[][16] = {
+static const char play_ghost_rows[][16] = {
     "     #####     ",
     "    #     #    ",
     "   #       #   ",
@@ -160,32 +127,60 @@ static const char ghost_rows[][16] = {
     "  #  ## ##  #  ",
     "  #  ## ##  #  ",
     "  #  ## ##  #  ",
-    "  #         #   ",
-    " #          #   ",
-    " #          #   ",
-    " #           #  ",
-    " #           #  ",
-    " #  #     #  #  ",
-    " #  #     #  #  ",
-    " #  #     #  #  ",
-    " #  #g    #g  # ",
-    "#g  #g    #g  # ",
-    "#g  #g    #g  # ",
-    "#g  #g    #g  # ",
-    "#g  #g    #g  # ",
-    "#g  #g    #g  # ",
-    "#g  #g    #g  # ",
-    "#gg #g    #g  # ",
-    "#gg #g    #g  # ",
-    "#ggg#g g  #ggg# ",
-    " ####gg#gg####  ",
-    "     ## ##      ",
+    "  #         #  ",
+    " #           # ",
+    " #           # ",
+    " #           # ",
+    " #           # ",
+    " #  #     #  # ",
+    " #  #     #  # ",
+    " #  #     #  # ",
+    " #  #g    #g # ",
+    "#g  #g    #g  #",
+    "#g  #g    #g  #",
+    "#g  #g    #g  #",
+    "#g  #g    #g  #",
+    "#g  #g    #g  #",
+    "#g  #g    #g  #",
+    "#gg #g    #g  #",
+    "#gg #g    #g  #",
+    "#ggg#g g  #ggg#",
+    " ####gg#gg#### ",
+    "     ## ##     ",
 };
 
-/*
- * Scale the 15x29 source to about 34x64 pixels inside the 68x68 canvas.
- * This is slightly larger than the previous version.
- */
+static const char work_ghost_rows[][16] = {
+    "     #####     ",
+    "    #     #    ",
+    "   #       #   ",
+    "   #       #   ",
+    "  #         #  ",
+    "  # ####### #  ",
+    "  ### ## ### # ",
+    "  ### ## ### # ",
+    "  ### ## ### # ",
+    "  # ####### #  ",
+    " #          #  ",
+    " #          #  ",
+    " #          #  ",
+    " #          #  ",
+    " #  #     #  # ",
+    " #  #     #  # ",
+    " #  ##   ##  # ",
+    "##  #g   #g  ##",
+    "##  #g   #g  ##",
+    "##  #g   #g  ##",
+    "##  #g   #g  ##",
+    "##  #g   #g  ##",
+    "##  #g   #g  ##",
+    "##  #g   #g  ##",
+    "### #g   #g ###",
+    "### #g   #g ###",
+    "###g#g g #ggg##",
+    " ####gg#gg#### ",
+    "     ## ##     ",
+};
+
 static int ghost_x(int logical_x) {
     return 17 + (logical_x * 34) / 15;
 }
@@ -194,7 +189,7 @@ static int ghost_y(int logical_y) {
     return 2 + (logical_y * 64) / 29;
 }
 
-static void draw_ghost(lv_obj_t *canvas, bool with_glasses) {
+static void draw_ghost_from_rows(lv_obj_t *canvas, const char rows[][16]) {
     lv_draw_rect_dsc_t fg;
     init_rect_dsc(&fg, LVGL_FOREGROUND);
 
@@ -205,13 +200,10 @@ static void draw_ghost(lv_obj_t *canvas, bool with_glasses) {
         for (int col = 0; col < 15; col++) {
             int x0 = ghost_x(col);
             int x1 = ghost_x(col + 1) - 1;
-            char px = ghost_rows[row][col];
+            char px = rows[row][col];
 
             if (px == '#') {
-                lv_canvas_draw_rect(canvas, x0, y0,
-                                    x1 - x0 + 1,
-                                    y1 - y0 + 1,
-                                    &fg);
+                lv_canvas_draw_rect(canvas, x0, y0, x1 - x0 + 1, y1 - y0 + 1, &fg);
             } else if (px == 'g') {
                 for (int y = y0; y <= y1; y++) {
                     for (int x = x0; x <= x1; x++) {
@@ -223,146 +215,69 @@ static void draw_ghost(lv_obj_t *canvas, bool with_glasses) {
             }
         }
     }
-
-    if (with_glasses) {
-        /*
-         * Normal clear-frame glasses:
-         * outlined lenses + bridge + short temple arms.
-         */
-        int left_x0  = ghost_x(3);
-        int left_x1  = ghost_x(8) - 1;
-        int right_x0 = ghost_x(8);
-        int right_x1 = ghost_x(13) - 1;
-        int top_y     = ghost_y(5);
-        int bottom_y  = ghost_y(10) - 1;
-
-        lv_draw_rect_dsc_t frame;
-        lv_draw_rect_dsc_init(&frame);
-        frame.bg_opa = LV_OPA_TRANSP;
-        frame.border_color = LVGL_FOREGROUND;
-        frame.border_width = 1;
-
-        lv_canvas_draw_rect(canvas,
-                            left_x0, top_y,
-                            left_x1 - left_x0 + 1,
-                            bottom_y - top_y + 1,
-                            &frame);
-
-        lv_canvas_draw_rect(canvas,
-                            right_x0, top_y,
-                            right_x1 - right_x0 + 1,
-                            bottom_y - top_y + 1,
-                            &frame);
-
-        int bridge_y = ghost_y(7);
-
-        lv_canvas_draw_rect(canvas,
-                            left_x1 + 1,
-                            bridge_y,
-                            right_x0 - left_x1 - 1,
-                            1,
-                            &fg);
-
-        lv_canvas_draw_rect(canvas,
-                            ghost_x(2),
-                            ghost_y(6),
-                            left_x0 - ghost_x(2),
-                            1,
-                            &fg);
-
-        lv_canvas_draw_rect(canvas,
-                            right_x1 + 1,
-                            ghost_y(6),
-                            ghost_x(14) - right_x1 - 1,
-                            1,
-                            &fg);
-    }
 }
-
-/* -------------------------------------------------------------------------- */
-/* Top canvas                                                                  */
-/* -------------------------------------------------------------------------- */
 
 static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], const struct status_state *state) {
     lv_obj_t *canvas = lv_obj_get_child(widget, 0);
     clear_canvas(canvas);
 
-    draw_small_battery(canvas, state->battery);
+    draw_large_battery(canvas, state->battery);
 
     char battery_text[8] = {};
     snprintf(battery_text, sizeof(battery_text), "%u%%", state->battery);
-    draw_tiny_text(canvas, 18, 7, battery_text);
+    draw_px7_text(canvas, 21, 4, battery_text);
 
     lv_draw_label_dsc_t profile_dsc;
-    init_label_dsc(&profile_dsc, LVGL_FOREGROUND, &lv_font_montserrat_18,
-                   LV_TEXT_ALIGN_CENTER);
+    init_label_dsc(&profile_dsc, LVGL_FOREGROUND, &lv_font_montserrat_18, LV_TEXT_ALIGN_CENTER);
 
     char profile_text[2] = {};
     snprintf(profile_text, sizeof(profile_text), "%d", state->active_profile_index + 1);
-    lv_canvas_draw_text(canvas, 49, 0, 18, &profile_dsc, profile_text);
+    lv_canvas_draw_text(canvas, 50, -1, 17, &profile_dsc, profile_text);
 
     lv_draw_label_dsc_t mode_dsc;
-    init_label_dsc(&mode_dsc, LVGL_FOREGROUND, &lv_font_montserrat_18,
-                   LV_TEXT_ALIGN_CENTER);
-
+    init_label_dsc(&mode_dsc, LVGL_FOREGROUND, &lv_font_montserrat_18, LV_TEXT_ALIGN_CENTER);
     lv_canvas_draw_text(canvas, 0, 35, CANVAS_SIZE, &mode_dsc, mode_name(state));
 
     rotate_canvas(canvas, cbuf);
 }
 
-/* -------------------------------------------------------------------------- */
-/* Middle canvas                                                               */
-/* -------------------------------------------------------------------------- */
-
-static void draw_middle(lv_obj_t *widget, lv_color_t cbuf[],
-                        const struct status_state *state) {
+static void draw_middle(lv_obj_t *widget, lv_color_t cbuf[], const struct status_state *state) {
     lv_obj_t *canvas = lv_obj_get_child(widget, 1);
     clear_canvas(canvas);
 
-    /* Layer 0 = plain ghost. Layers 1 and 2 = glasses ghost. */
-    draw_ghost(canvas, state->layer_index != 0);
+    if (state->layer_index == 0) {
+        draw_ghost_from_rows(canvas, play_ghost_rows);
+    } else {
+        draw_ghost_from_rows(canvas, work_ghost_rows);
+    }
 
     rotate_canvas(canvas, cbuf);
 }
 
-/* -------------------------------------------------------------------------- */
-/* Bottom canvas                                                               */
-/* -------------------------------------------------------------------------- */
-
-static void draw_bottom(lv_obj_t *widget, lv_color_t cbuf[],
-                        const struct status_state *state) {
+static void draw_bottom(lv_obj_t *widget, lv_color_t cbuf[], const struct status_state *state) {
     lv_obj_t *canvas = lv_obj_get_child(widget, 2);
     clear_canvas(canvas);
 
     lv_draw_label_dsc_t status_dsc;
-    init_label_dsc(&status_dsc, LVGL_FOREGROUND, &lv_font_montserrat_10,
-                   LV_TEXT_ALIGN_CENTER);
+    init_label_dsc(&status_dsc, LVGL_FOREGROUND, &lv_font_montserrat_10, LV_TEXT_ALIGN_CENTER);
 
-    const char *status_text =
-        state->active_profile_connected ? "Connected" : "Pairing";
-
+    const char *status_text = state->active_profile_connected ? "Connected" : "Pairing";
     lv_canvas_draw_text(canvas, 0, 5, CANVAS_SIZE, &status_dsc, status_text);
 
     rotate_canvas(canvas, cbuf);
 }
-
-/* -------------------------------------------------------------------------- */
-/* Battery listener                                                            */
-/* -------------------------------------------------------------------------- */
 
 static void set_battery_status(struct zmk_widget_status *widget,
                                struct battery_status_state state) {
 #if IS_ENABLED(CONFIG_USB_DEVICE_STACK)
     widget->state.charging = state.usb_present;
 #endif
-
     widget->state.battery = state.level;
     draw_top(widget->obj, widget->cbuf, &widget->state);
 }
 
 static void battery_status_update_cb(struct battery_status_state state) {
     struct zmk_widget_status *widget;
-
     SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) {
         set_battery_status(widget, state);
     }
@@ -370,7 +285,6 @@ static void battery_status_update_cb(struct battery_status_state state) {
 
 static struct battery_status_state battery_status_get_state(const zmk_event_t *eh) {
     const struct zmk_battery_state_changed *ev = as_zmk_battery_state_changed(eh);
-
     return (struct battery_status_state){
         .level = (ev != NULL) ? ev->state_of_charge : zmk_battery_state_of_charge(),
 #if IS_ENABLED(CONFIG_USB_DEVICE_STACK)
@@ -381,29 +295,21 @@ static struct battery_status_state battery_status_get_state(const zmk_event_t *e
 
 ZMK_DISPLAY_WIDGET_LISTENER(widget_battery_status, struct battery_status_state,
                             battery_status_update_cb, battery_status_get_state)
-
 ZMK_SUBSCRIPTION(widget_battery_status, zmk_battery_state_changed);
-
 #if IS_ENABLED(CONFIG_USB_DEVICE_STACK)
 ZMK_SUBSCRIPTION(widget_battery_status, zmk_usb_conn_state_changed);
 #endif
-
-/* -------------------------------------------------------------------------- */
-/* Bluetooth listener                                                          */
-/* -------------------------------------------------------------------------- */
 
 static void set_output_status(struct zmk_widget_status *widget,
                               const struct output_status_state *state) {
     widget->state.active_profile_index = state->active_profile_index;
     widget->state.active_profile_connected = state->active_profile_connected;
-
     draw_top(widget->obj, widget->cbuf, &widget->state);
     draw_bottom(widget->obj, widget->cbuf3, &widget->state);
 }
 
 static void output_status_update_cb(struct output_status_state state) {
     struct zmk_widget_status *widget;
-
     SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) {
         set_output_status(widget, &state);
     }
@@ -418,29 +324,21 @@ static struct output_status_state output_status_get_state(const zmk_event_t *_eh
 
 ZMK_DISPLAY_WIDGET_LISTENER(widget_output_status, struct output_status_state,
                             output_status_update_cb, output_status_get_state)
-
 ZMK_SUBSCRIPTION(widget_output_status, zmk_endpoint_changed);
-
 #if defined(CONFIG_ZMK_BLE)
 ZMK_SUBSCRIPTION(widget_output_status, zmk_ble_active_profile_changed);
 #endif
-
-/* -------------------------------------------------------------------------- */
-/* Layer listener                                                              */
-/* -------------------------------------------------------------------------- */
 
 static void set_layer_status(struct zmk_widget_status *widget,
                              struct layer_status_state state) {
     widget->state.layer_index = state.index;
     widget->state.layer_label = state.label;
-
     draw_top(widget->obj, widget->cbuf, &widget->state);
     draw_middle(widget->obj, widget->cbuf2, &widget->state);
 }
 
 static void layer_status_update_cb(struct layer_status_state state) {
     struct zmk_widget_status *widget;
-
     SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) {
         set_layer_status(widget, state);
     }
@@ -448,7 +346,6 @@ static void layer_status_update_cb(struct layer_status_state state) {
 
 static struct layer_status_state layer_status_get_state(const zmk_event_t *eh) {
     zmk_keymap_layer_index_t index = zmk_keymap_highest_layer_active();
-
     return (struct layer_status_state){
         .index = index,
         .label = zmk_keymap_layer_name(zmk_keymap_layer_index_to_id(index)),
@@ -457,12 +354,7 @@ static struct layer_status_state layer_status_get_state(const zmk_event_t *eh) {
 
 ZMK_DISPLAY_WIDGET_LISTENER(widget_layer_status, struct layer_status_state,
                             layer_status_update_cb, layer_status_get_state)
-
 ZMK_SUBSCRIPTION(widget_layer_status, zmk_layer_state_changed);
-
-/* -------------------------------------------------------------------------- */
-/* Init                                                                        */
-/* -------------------------------------------------------------------------- */
 
 int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
     widget->obj = lv_obj_create(parent);
@@ -470,18 +362,15 @@ int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
 
     lv_obj_t *top = lv_canvas_create(widget->obj);
     lv_obj_align(top, LV_ALIGN_TOP_RIGHT, 0, 0);
-    lv_canvas_set_buffer(top, widget->cbuf, CANVAS_SIZE, CANVAS_SIZE,
-                         LV_IMG_CF_TRUE_COLOR);
+    lv_canvas_set_buffer(top, widget->cbuf, CANVAS_SIZE, CANVAS_SIZE, LV_IMG_CF_TRUE_COLOR);
 
     lv_obj_t *middle = lv_canvas_create(widget->obj);
     lv_obj_align(middle, LV_ALIGN_TOP_LEFT, 24, 0);
-    lv_canvas_set_buffer(middle, widget->cbuf2, CANVAS_SIZE, CANVAS_SIZE,
-                         LV_IMG_CF_TRUE_COLOR);
+    lv_canvas_set_buffer(middle, widget->cbuf2, CANVAS_SIZE, CANVAS_SIZE, LV_IMG_CF_TRUE_COLOR);
 
     lv_obj_t *bottom = lv_canvas_create(widget->obj);
     lv_obj_align(bottom, LV_ALIGN_TOP_LEFT, -44, 0);
-    lv_canvas_set_buffer(bottom, widget->cbuf3, CANVAS_SIZE, CANVAS_SIZE,
-                         LV_IMG_CF_TRUE_COLOR);
+    lv_canvas_set_buffer(bottom, widget->cbuf3, CANVAS_SIZE, CANVAS_SIZE, LV_IMG_CF_TRUE_COLOR);
 
     sys_slist_append(&widgets, &widget->node);
 
