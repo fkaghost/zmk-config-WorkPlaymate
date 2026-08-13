@@ -1,7 +1,7 @@
 /*
  * WorkPlayMate custom nice!view screen
  *
- * PLAY, WORK, and WORK2 all use the same shared 15x29 ghost.
+ * PLAY keeps the existing 15x29 ghost; WORK and WORK2 use the alternate 15x29 ghost.
  *
  * Ghost legend:
  *   # = solid black
@@ -133,7 +133,7 @@ static void draw_large_battery(lv_obj_t *canvas, uint8_t battery) {
  *
  * Rendered at 2x scale => 30 x 58 pixels.
  */
-static const char ghost_rows[][16] = {
+static const char *const play_ghost_rows[] = {
     "     #####     ",
     "    #     #    ",
     "   #       #   ",
@@ -165,7 +165,40 @@ static const char ghost_rows[][16] = {
     "     ## ##      ",
 };
 
-static void draw_ghost(lv_obj_t *canvas) {
+/* WORK / WORK2 ghost */
+static const char *const work_ghost_rows[] = {
+    "     #####     ",
+    "    #     #    ",
+    "   #       #   ",
+    "   #       #   ",
+    "  #         #  ",
+    "  #  ## ##  #  ",
+    "  ####g #g###  ",
+    " g#  #g #g  #g ",
+    "  #  ## ##  #  ",
+    "  #         #   ",
+    " #          #   ",
+    " #          #   ",
+    " #           #  ",
+    " #           #  ",
+    " #  #     #  #  ",
+    " #  #     #  #  ",
+    " #  #     #  #  ",
+    " #  #g    #g  # ",
+    "#g  #g    #g  # ",
+    "#g  #g    #g  # ",
+    "#g  #g    #g  # ",
+    "#g  #g    #g  # ",
+    "#g  #g    #g  # ",
+    "#g  #g    #g  # ",
+    "#gg #g    #g  # ",
+    "#gg #g    #g  # ",
+    "#ggg#g g  #ggg# ",
+    " ####gg#gg####  ",
+    "     ## ##      "
+};
+
+static void draw_ghost(lv_obj_t *canvas, const char *const rows[]) {
     const int scale = 2;
     const int ghost_width = 15 * scale;
     const int ghost_height = 29 * scale;
@@ -177,7 +210,7 @@ static void draw_ghost(lv_obj_t *canvas) {
 
     for (int row = 0; row < 29; row++) {
         for (int col = 0; col < 15; col++) {
-            char px = ghost_rows[row][col];
+            char px = rows[row][col];
 
             if (px == '#') {
                 lv_canvas_draw_rect(canvas,
@@ -189,7 +222,7 @@ static void draw_ghost(lv_obj_t *canvas) {
             } else if (px == 'g') {
                 /*
                  * One black pixel out of each 2x2 logical cell produces
-                 * a subtle monochrome approximation of the gray shading.
+                 * the same subtle monochrome gray approximation.
                  */
                 int dx = (row + col) & 1;
                 int dy = (row + col + 1) & 1;
@@ -239,13 +272,14 @@ static void draw_top(lv_obj_t *widget, lv_color_t cbuf[],
 
 static void draw_middle(lv_obj_t *widget, lv_color_t cbuf[],
                         const struct status_state *state) {
-    ARG_UNUSED(state);
-
     lv_obj_t *canvas = lv_obj_get_child(widget, 1);
     clear_canvas(canvas);
 
-    /* Same ghost for PLAY, WORK, and WORK2. */
-    draw_ghost(canvas);
+    if (state->layer_index == 0) {
+        draw_ghost(canvas, play_ghost_rows);
+    } else {
+        draw_ghost(canvas, work_ghost_rows);
+    }
 
     rotate_canvas(canvas, cbuf);
 }
